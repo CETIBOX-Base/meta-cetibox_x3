@@ -1,0 +1,60 @@
+diff --git a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c
+index ca62ad96..48a0d167 100644
+--- a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c
++++ b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c
+@@ -1027,9 +1027,7 @@ void pfc_init_h3_v1(void)
+ 			       | GPSR1_A2
+ 			       | GPSR1_A1
+ 			       | GPSR1_A0);
+-	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_AVTP_CAPTURE_A
+-			       | GPSR2_AVB_AVTP_MATCH_A
+-			       | GPSR2_AVB_LINK
++	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_LINK
+ 			       | GPSR2_AVB_PHY_INT
+ 			       | GPSR2_AVB_MDC
+ 			       | GPSR2_PWM2_A
+diff --git a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
+index 9bff0861..e6e95904 100644
+--- a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
++++ b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
+@@ -1076,9 +1076,7 @@ void pfc_init_h3_v2(void)
+ 			       | GPSR1_A2
+ 			       | GPSR1_A1
+ 			       | GPSR1_A0);
+-	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_AVTP_CAPTURE_A
+-			       | GPSR2_AVB_AVTP_MATCH_A
+-			       | GPSR2_AVB_LINK
++	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_LINK
+ 			       | GPSR2_AVB_PHY_INT
+ 			       | GPSR2_AVB_MDC
+ 			       | GPSR2_PWM2_A
+diff --git a/plat/renesas/rcar/pfc/M3/pfc_init_m3.c b/plat/renesas/rcar/pfc/M3/pfc_init_m3.c
+index c060d0f1..851a7112 100644
+--- a/plat/renesas/rcar/pfc/M3/pfc_init_m3.c
++++ b/plat/renesas/rcar/pfc/M3/pfc_init_m3.c
+@@ -1160,9 +1160,7 @@ void pfc_init_m3(void)
+ 			       | GPSR1_A2
+ 			       | GPSR1_A1
+ 			       | GPSR1_A0);
+-	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_AVTP_CAPTURE_A
+-			       | GPSR2_AVB_AVTP_MATCH_A
+-			       | GPSR2_AVB_LINK
++	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_LINK
+ 			       | GPSR2_AVB_PHY_INT
+ 			       | GPSR2_AVB_MDC
+ 			       | GPSR2_PWM2_A
+diff --git a/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c b/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c
+index 82281fd5..eabeafb3 100644
+--- a/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c
++++ b/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c
+@@ -1063,9 +1063,7 @@ void pfc_init_m3n(void)
+ 			       | GPSR1_A2
+ 			       | GPSR1_A1
+ 			       | GPSR1_A0);
+-	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_AVTP_CAPTURE_A
+-			       | GPSR2_AVB_AVTP_MATCH_A
+-			       | GPSR2_AVB_LINK
++	pfc_reg_write(PFC_GPSR2, GPSR2_AVB_LINK
+ 			       | GPSR2_AVB_PHY_INT
+ 			       | GPSR2_AVB_MDC
+ 			       | GPSR2_PWM2_A

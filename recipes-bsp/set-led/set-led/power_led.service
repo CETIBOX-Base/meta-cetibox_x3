@@ -1,0 +1,10 @@
+[Unit]
+Description=Turn on LED during boot time
+After=sys-devices-platform-soc-e66e0000.i2c-i2c\x2d5.device
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/set_led 8 green
+
+[Install]
+WantedBy=basic.target

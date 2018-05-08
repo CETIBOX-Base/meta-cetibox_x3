@@ -1,0 +1,95 @@
+#!/bin/sh
+
+[ "${FLOCKER}" != "$0" ] && exec env FLOCKER="$0" flock -x "$0" "$0" "$@" || :
+
+I2C_BUS_NUM=5
+LED_CPLD_ADDRESS=0x4d
+
+usage() {
+	echo "Usage:"
+	echo "    $0 [1..8] [yellow|green|both|off]"
+}
+
+if [ "$#" -ne 2 ]; then
+	echo "Incorrect number of parameters."
+	usage
+	exit 1
+fi
+
+if [ "$1" -lt 1 ] || [ "$1" -gt 8 ]; then
+	echo "Selected LED out of range."
+	usage
+	exit 1
+fi
+
+cpld_register=0
+shift_offset=0
+
+case "$1" in
+	1)	shift_offset=6
+		cpld_register=0
+		;;
+	2)	shift_offset=4
+		cpld_register=0
+		;;
+	3)	shift_offset=2
+		cpld_register=0
+		;;
+	4)	shift_offset=0
+		cpld_register=0
+		;;
+	5)	shift_offset=6
+		cpld_register=1
+		;;
+	6)	shift_offset=4
+		cpld_register=1
+		;;
+	7)	shift_offset=2
+		cpld_register=1
+		;;
+	8)	shift_offset=0
+		cpld_register=1
+esac
+
+shift_value=0
+
+case "$2" in
+	both)
+		shift_value=$((0))
+		;;
+	green)
+		shift_value=$((1))
+		;;
+	yellow)
+		shift_value=$((2))
+		;;
+	off)
+		shift_value=$((3))
+		;;
+	*)
+		echo "Invalid operation."
+		usage
+		exit 1
+		;;
+esac
+
+current_value0=$(i2cget -y "$I2C_BUS_NUM" "$LED_CPLD_ADDRESS" "0x00")
+current_value1=$(i2cget -y "$I2C_BUS_NUM" "$LED_CPLD_ADDRESS" "0x01")
+
+#echo "Cur: $current_value0, $current_value1"
+#echo "shift_offset: $shift_offset"
+
+if [ $cpld_register -eq 0 ]; then
+	tmp_value=$((current_value0&(~(3 << shift_offset))))
+	new_value0=$((tmp_value|(shift_value << shift_offset)))
+	new_value1=$current_value1
+else
+	new_value0=$current_value0
+	tmp_value=$((current_value1&(~(3 << shift_offset))))
+	new_value1=$((tmp_value|(shift_value << shift_offset)))
+fi
+
+
+#echo "New: $new_value0, $new_value1"
+
+i2cset -y "$I2C_BUS_NUM" "$LED_CPLD_ADDRESS" 0 "$new_value0" "$new_value1" i

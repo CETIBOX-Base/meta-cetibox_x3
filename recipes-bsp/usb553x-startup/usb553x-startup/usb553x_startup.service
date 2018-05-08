@@ -1,0 +1,10 @@
+[Unit]
+Description=Microchip USB553x USB hub initialization
+After=sys-devices-platform-soc-e66e0000.i2c-i2c\x2d5.device
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/usb553x_startup.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+ACTION!="add", GOTO="persistent_can_end"
+SUBSYSTEM!="net", GOTO="persistent_can_end"
+
+# SPI connected CAN interface
+DEVPATH=="*/soc/e6e90000.spi/spi_master/spi0/spi0.0/net/*", NAME="canif2"	# gateway expansion board v1/v2
+
+# built-in CAN-FD controller, channels 0 and 1
+DEVPATH!="*/soc/e66c0000.can/net/*", GOTO="persistent_canfd_end"
+ATTR{dev_port}=="0", NAME="canif0"
+ATTR{dev_port}=="1", NAME="canif1"
+LABEL="persistent_canfd_end"
+
+LABEL="persistent_can_end"

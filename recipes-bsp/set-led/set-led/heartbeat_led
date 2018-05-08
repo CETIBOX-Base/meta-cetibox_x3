@@ -1,0 +1,8 @@
+#!/bin/sh
+
+while true; do
+	set_led 4 off
+	sleep 2
+	set_led 4 green
+	sleep 0.05
+done

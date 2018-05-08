@@ -1,0 +1,10 @@
+[Unit]
+Description=Blink LED to signal a working, not hanging box
+After=sys-devices-platform-soc-e66e0000.i2c-i2c\x2d5.device power_led.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/heartbeat_led
+
+[Install]
+WantedBy=multi-user.target

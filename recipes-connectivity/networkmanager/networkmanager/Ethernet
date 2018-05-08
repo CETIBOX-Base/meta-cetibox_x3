@@ -1,0 +1,13 @@
+[connection]
+id=Ethernet
+type=ethernet
+autoconnect-priority=-999
+interface-name=eth0
+
+[ipv4]
+address1=10.0.0.1/24
+method=manual
+
+[ipv6]
+address1=fec0::1/48
+method=manual
