@@ -1,7 +1,7 @@
 [Unit]
 Description=Initialize SJA1105 switch
-Wants=sys-devices-virtual-spi-spidev1.1.device
-After=sys-devices-virtual-spi-spidev1.1.device
+Wants=sys-devices-virtual-sja1105_spi-sja1105_spi1.1.device
+After=sys-devices-virtual-sja1105_spi-sja1105_spi1.1.device
 
 [Service]
 Type=simple

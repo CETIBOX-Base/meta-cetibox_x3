@@ -1,0 +1,2 @@
+# Tag systemd to allow depending on device
+ACTION=="add", SUBSYSTEM=="sja1105_spi", TAG+="systemd"

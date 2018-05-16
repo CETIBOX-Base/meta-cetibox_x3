@@ -20,6 +20,8 @@ SRCREV = "c5f4cfe9ecaa6fb5a85c90a4a659775478a1e7f8"
 
 DEPENDS = "libxml2"
 
+RDEPENDS_${PN}_append = " kernel-module-sja1105-spi"
+
 SYSTEMD_PACKAGES = "${PN}"
 SYSTEMD_SERVICE_${PN} = " \
 	sja1105.service \
