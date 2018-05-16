@@ -8,6 +8,7 @@ IMAGE_INSTALL_append = " \
 	iproute2-tc \
 	iproute2-ss \
 	kernel-modules \
+	most-driver \
 	coreutils \
 	openssh-sftp-server \
 	u-boot-fw-utils \
