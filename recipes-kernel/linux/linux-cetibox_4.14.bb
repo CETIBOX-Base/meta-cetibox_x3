@@ -21,7 +21,7 @@ CETIBOX_KERNEL_URL = "git://github.com/CETIBOX-Base/linux.git;protocol=https"
 #CETIBOX_KERNEL_URL = "git:///home/ubuntu/data/git/cetibox_x3/dev/code/components/linux/kernel"
 
 # Use the update_submodule_recipes.sh script to update this revision
-SRCREV = "fe60c91ef2e290c70f3730d51a7c635a83b663f7"
+SRCREV = "b5babf3fe2b45900189eea45f987c4f450ca3384"
 
 # For development work, it can be useful to refer to the branch tip instead of a
 # fixed commit. To enable this, uncomment the following lines and comment out the
@@ -70,6 +70,7 @@ USB3_FIRMWARE_V3 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/lin
 SRC_URI_append = " \
     ${USB3_FIRMWARE_V2} \
     ${USB3_FIRMWARE_V3} \
+	file://firmware.conf \
 "
 
 do_download_firmware () {
@@ -78,10 +79,21 @@ do_download_firmware () {
 
 addtask do_download_firmware after do_configure before do_compile
 
+DEPENDS_append = " u-boot-mkimage-native"
+
+do_compile_append() {
+	usr/gen_init_cpio ${WORKDIR}/firmware.conf | gzip > firmware.cpio.gz
+	mkimage -A arm -T ramdisk -C gzip -d firmware.cpio.gz firmware.img
+}
+
 do_install_append () {
 	install -d ${D}${nonarch_base_libdir}/firmware
 	install -m 755 ${WORKDIR}/r8a779x_usb3_v*.dlmem ${D}${nonarch_base_libdir}/firmware
+
+	install -D -m 644 ${B}/firmware.img ${D}/boot/firmware.img
 }
 
 PACKAGES_append = " kernel-firmware-r8a779x-usb3"
 FILES_kernel-firmware-r8a779x-usb3 = "${nonarch_base_libdir}/firmware/r8a779x_usb3_v*.dlmem"
+
+FILES_kernel-image_append = "boot/firmware.img"

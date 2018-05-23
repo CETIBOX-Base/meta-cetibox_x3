@@ -1,2 +1,0 @@
-# Tag systemd to allow depending on existing i2c bus
-ACTION=="add", SUBSYSTEM=="i2c", TAG+="systemd"
