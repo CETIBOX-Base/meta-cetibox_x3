@@ -5,7 +5,7 @@ LICENSE = "GPLv2+"
 LIC_FILES_CHKSUM = "file://Licenses/README;md5=a2c678cfd4a4d97135585cad908541c6"
 PE = "1"
 
-SRCREV = "ceff4da9c010abda6721a33f72f28dea35f3d492"
+SRCREV = "d12cee490c11de8847ca898767c10edb88d3b9c9"
 BRANCH = "v2018.05/rcar-ctc"
 PV = "2018.05+rcar+ctc"
 
