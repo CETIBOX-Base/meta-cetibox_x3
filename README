@@ -9,25 +9,29 @@ Dependencies
 
 This layer depends on:
 
-  URI: git://git.openembedded.org/bitbake
-  branch: master
+  URI: https://github.com/CETIBOX-Base/poky
+  layers: meta, meta-poky, meta-yocto-bsp
+  branch: rocko-cetibox
 
-  URI: git://git.openembedded.org/openembedded-core
-  layers: meta
-  branch: master
+  URI: https://github.com/CETIBOX-Base/meta-openembedded
+  layers: meta-oe, meta-python, meta-networking
+  branch: rocko
 
-  URI: git://git.yoctoproject.org/xxxx
-  layers: xxxx
-  branch: master
+  URI: https://github.com/CETIBOX-Base/meta-renesas
+  layers: meta-rcar-gen3
+  branch: rocko
 
+  URI: https://github.com/CETIBOX-Base/meta-linaro
+  layers: meta-linaro-toolchain, meta-optee
+  branch: rocko
 
 Patches
 =======
 
-Please submit any patches against the cetibox_x3 layer to the
-xxxx mailing list (xxxx@zzzz.org) and cc: the maintainer:
+Please submit any patches against the cetibox_x3 layer to the CETiBOX X3
+development team (cetibox.development@cetitec.com) and cc: the maintainer:
 
-Maintainer: XXX YYYYYY <xxx.yyyyyy@zzzzz.com>
+Maintainer: Matthias Blankertz <matthias.blankertz@cetitec.com>
 
 
 Table of Contents
@@ -40,25 +44,14 @@ Table of Contents
 I. Adding the cetibox_x3 layer to your build
 =================================================
 
---- replace with specific instructions for the cetibox_x3 layer ---
-
-In order to use this layer, you need to make the build system aware of
-it.
-
-Assuming the cetibox_x3 layer exists at the top-level of your
-yocto build tree, you can add it to the build system by adding the
-location of the cetibox_x3 layer to bblayers.conf, along with any
-other layers needed. e.g.:
-
-  BBLAYERS ?= " \
-    /path/to/yocto/meta \
-    /path/to/yocto/meta-poky \
-    /path/to/yocto/meta-yocto-bsp \
-    /path/to/yocto/meta-cetibox_x3 \
-    "
+Setting up your bitbake environment with the environment variable 
+TEMPLATECONF=/path/to/yocto/meta-cetibox_x3/conf 
+will configure your bitbake environment correctly to build the cetibox
+base level images.
 
 
 II. Misc
 ========
 
---- replace with specific information about the cetibox_x3 layer ---
+For further documentation please see https://docu.cetitecgmbh.com/CETIBOX-Base
+
