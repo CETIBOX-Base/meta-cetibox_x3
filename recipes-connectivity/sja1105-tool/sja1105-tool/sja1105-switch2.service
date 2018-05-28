@@ -1,0 +1,20 @@
+[Unit]
+Description=Initialize second SJA1105 switch
+Wants=sys-devices-virtual-sja1105_spi-sja1105_spi1.2.device
+After=sys-devices-virtual-sja1105_spi-sja1105_spi1.2.device
+
+[Service]
+Type=simple
+# During bootup, noise on the SPI lines could confuse the switch, preventing
+# sja1105-tool from uploading the switch configuration. We hide this problem
+# by executing a cold reset via sja1105-tool, ignoring its return value. This
+# way, the SPI interfaces are in a good state again.
+Environment=SJA1105_CONF=/etc/sja1105/sja1105-2.conf
+ExecStartPre=-/usr/bin/sja1105-tool reset cold
+ExecStartPre=/bin/sh -c "/usr/bin/sja1105-tool config load /etc/sja1105/default-switch2.xml"
+ExecStart=/usr/bin/sja1105-tool config upload
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
