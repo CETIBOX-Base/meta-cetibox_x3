@@ -2,4 +2,4 @@ require cetibox-base-image.inc
 
 DESCRIPTION = "The CETiBOX Base Edition image"
 
-IMAGE_FEATURES += "empty-root-password"
+IMAGE_FEATURES += "empty-root-password allow-empty-password"
