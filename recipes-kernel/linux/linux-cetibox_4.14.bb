@@ -21,7 +21,7 @@ CETIBOX_KERNEL_URL = "git://github.com/CETIBOX-Base/linux.git;protocol=https"
 #CETIBOX_KERNEL_URL = "git:///home/ubuntu/data/git/cetibox_x3/dev/code/components/linux/kernel"
 
 # Use the update_submodule_recipes.sh script to update this revision
-SRCREV = "5c8af6af0742bf2f681a69d56de5f9fdd0d95608"
+SRCREV = "8881258562cdb8b27740b4bb28227d92e99b4dd2"
 
 # For development work, it can be useful to refer to the branch tip instead of a
 # fixed commit. To enable this, uncomment the following lines and comment out the
@@ -34,7 +34,7 @@ BRANCH = "v4.14/rcar-ctc"
 #SRC_URI = "${CETIBOX_KERNEL_URL};nocheckout=1;rev=${SRCREV};nobranch=1"
 SRC_URI = "${CETIBOX_KERNEL_URL};nocheckout=1;rev=${SRCREV};branch=${BRANCH}"
 
-LINUX_VERSION ?= "4.14.36"
+LINUX_VERSION ?= "4.14.44"
 PV = "${LINUX_VERSION}+git${SRCPV}"
 PR = "r1"
 
