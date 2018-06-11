@@ -18,6 +18,8 @@ IMAGE_INSTALL_append = " \
 	python-misc \
 	python-argparse \
 	python-ctypes \
+	python-subprocess \
+	python-terminal \
 	v4l-utils \
 	glibc-dbg \
 "
