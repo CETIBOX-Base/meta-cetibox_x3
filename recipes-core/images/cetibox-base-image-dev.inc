@@ -13,13 +13,13 @@ IMAGE_INSTALL_append = " \
 	usbutils \
 	devmem2 \
 	python-smbus \
-	python-can \
 	python-importlib \
 	python-misc \
 	python-argparse \
 	python-ctypes \
 	python-subprocess \
 	python-terminal \
+	python3-can \
 	v4l-utils \
 	glibc-dbg \
 "
