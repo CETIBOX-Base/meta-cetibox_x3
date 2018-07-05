@@ -20,6 +20,7 @@ IMAGE_INSTALL_append = " \
 	python-subprocess \
 	python-terminal \
 	python3-can \
+	python3-setuptools \
 	v4l-utils \
 	glibc-dbg \
 "
