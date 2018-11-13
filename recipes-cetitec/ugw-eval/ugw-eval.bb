@@ -4,17 +4,22 @@
 DESCRIPTION = "Installs the evaluation version of the CETiTEC Universal Gateway."
 HOMEPAGE = "http://www.cetitec.com"
 LICENSE = "CLOSED"
-SECTION = ""
 DEPENDS = " \
     libsocketcan \
 "
 
+RDEPENDS_${PN} = " \
+    acs-eval \
+"
+
+INSANE_SKIP_${PN} += " already-stripped"
+
 SRC_URI = " \
-	file://UgwEval.tar \
+	file://UgwEval.tar;subdir=${PN}-${PV} \
 "
 
 inherit bin_package
 
 do_install() {
-    install -D -m 0755 ${WORKDIR}/UgwEval ${D}${bindir}/UgwEval
+    install -D -m 0755 UgwEval ${D}${bindir}/UgwEval
 }

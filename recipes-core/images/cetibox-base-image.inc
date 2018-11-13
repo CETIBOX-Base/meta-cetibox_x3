@@ -29,6 +29,7 @@ IMAGE_INSTALL_append = " \
 #
 #IMAGE_INSTALL_append = " \
 #    ugw-eval \
+#    acs-eval \
 #"
 
 IMAGE_INSTALL_remove = " \
