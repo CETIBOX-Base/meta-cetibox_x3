@@ -19,7 +19,16 @@ SRC_URI = " \
 "
 
 inherit bin_package
+inherit systemd
+
+SYSTEMD_SERVICE = "ugw-eval.service"
 
 do_install() {
     install -D -m 0755 UgwEval ${D}${bindir}/UgwEval
+
+    install -d -m0755 ${D}${systemd_unitdir}
+    install -D -m 644 ugw-eval.service ${D}${systemd_unitdir}/system/ugw-eval.service
+
+    install -d -m0755 ${D}${libdir}
+    install -D -m 644 gatewaytable-eval.bin ${D}${localstatedir}/lib/ugw/gatewaytable-eval.bin
 }
