@@ -41,7 +41,7 @@ FILES_LIBK2LMOSTDRIVER_EVAL = " \
 
 FILES_TESTFBLOCK_EVAL = " \
     ${bindir}/TestFBlock-eval \
-    ${systemd_unitdir}/system/testfblock-eval@.service \
+    ${systemd_unitdir}/system/testfblock-eval.service \
 "
 
 FILES_${PN} = " \
@@ -54,6 +54,8 @@ FILES_${PN} = " \
 SYSTEMD_SERVICE = " \
     acsdaemon-eval.service \
 "
+
+SYSTEMD_AUTO_ENABLE = "enable"
 
 do_install() {
     install -d -m0755 ${D}${libdir}
@@ -76,5 +78,5 @@ do_install() {
     install -m 0755 usr/lib/libk2lmostdriver-eval.so ${D}${libdir}/libk2lmostdriver-eval.so
     
     install -D -m 755 usr/bin/TestFBlock-eval ${D}${bindir}/TestFBlock-eval
-    install -D -m 644 lib/systemd/system/testfblock-eval@.service ${D}${systemd_unitdir}/system/testfblock-eval@.service
+    install -D -m 644 lib/systemd/system/testfblock-eval.service ${D}${systemd_unitdir}/system/testfblock-eval.service
 }
