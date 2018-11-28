@@ -1,0 +1,5 @@
+[Unit]
+Description=Configure the MOST INIC after drivers were loaded.
+
+[Service]
+ExecStart=/usr/bin/most-driver-setup-channels.sh
