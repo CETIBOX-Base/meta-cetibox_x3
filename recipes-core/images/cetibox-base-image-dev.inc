@@ -23,5 +23,6 @@ IMAGE_INSTALL_append = " \
 	python3-setuptools \
 	v4l-utils \
 	glibc-dbg \
-    valgrind \
+	valgrind \
+	udev-rules \
 "
