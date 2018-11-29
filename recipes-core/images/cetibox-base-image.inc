@@ -19,6 +19,7 @@ IMAGE_INSTALL_append = " \
 	rsync \
 	tcpdump \
 	kernel-firmware-r8a779x-usb3 \
+	udev-rules \
 "
 
 IMAGE_INSTALL_remove = " \

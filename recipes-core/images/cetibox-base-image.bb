@@ -1,4 +1,5 @@
 require cetibox-base-image.inc
+require cetibox-base-only.inc
 
 DESCRIPTION = "The CETiBOX Base Edition image"
 
