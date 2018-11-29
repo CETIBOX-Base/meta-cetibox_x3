@@ -51,11 +51,9 @@ FILES_${PN} = " \
     ${FILES_TESTFBLOCK_EVAL} \
 "
 
-SYSTEMD_SERVICE = " \
+SYSTEMD_SERVICE_${PN} = " \
     acsdaemon-eval.service \
 "
-
-SYSTEMD_AUTO_ENABLE = "enable"
 
 do_install() {
     install -d -m0755 ${D}${libdir}

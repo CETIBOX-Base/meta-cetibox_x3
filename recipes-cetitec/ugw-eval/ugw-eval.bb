@@ -21,7 +21,9 @@ SRC_URI = " \
 inherit bin_package
 inherit systemd
 
-SYSTEMD_SERVICE = "ugw-eval.service"
+SYSTEMD_SERVICE_${PN} = " \
+    ugw-eval.service \
+"
 
 do_install() {
     install -D -m 0755 UgwEval ${D}${bindir}/UgwEval
