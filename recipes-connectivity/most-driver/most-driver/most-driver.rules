@@ -1,19 +1,10 @@
 # Load and configure most driver when usb INIC is attached
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0424", ATTR{idProduct}=="cf18", RUN{builtin}="kmod load aim_network aim_cdev hdm_usb"
 
-## Note: Due to race condition in the MOST driver we cannot configure the
-##       control and async channels here. As a workaround we currently use a
-##       systemd path unit to wait until all sysfs nodes are available before
-##       writing the configuration.
-##       This workaround will be rolled back as soon as the bug in the driver
-##       is fixed.
-# Configure Control Channel
-#ACTION=="add", DEVPATH=="/devices/virtual/most/mostcore/devices/mdev0/ep0f", RUN{program}="most-setup $sys$devpath control tx"
-#ACTION=="add", DEVPATH=="/devices/virtual/most/mostcore/devices/mdev0/ep8f", RUN{program}="most-setup $sys$devpath control rx"
-
-# Configure Async Channel
-#ACTION=="add", DEVPATH=="/devices/virtual/most/mostcore/devices/mdev1/ep0e", RUN{program}="most-setup $sys$devpath async tx"
-#ACTION=="add", DEVPATH=="/devices/virtual/most/mostcore/devices/mdev1/ep8e", RUN{program}="most-setup $sys$devpath async rx"
+# Tag systemd to make most driver initialization depend on all mdevs available
+ACTION=="add", DEVPATH=="/devices/virtual/most/mostcore/devices/mdev0", TAG+="systemd"
+ACTION=="add", DEVPATH=="/devices/virtual/most/mostcore/devices/mdev1", TAG+="systemd"
+ACTION=="add", DEVPATH=="/devices/virtual/most/mostcore/devices/mdev2", TAG+="systemd"
 
 # Permissions on /dev/inic nodes, tag systemd to allow depending on these nodes
 ACTION=="add", SUBSYSTEM=="most_cdev_aim", MODE="0666", TAG+="systemd", ENV{SYSTEMD_WANTS}="acsdaemon-eval.service"

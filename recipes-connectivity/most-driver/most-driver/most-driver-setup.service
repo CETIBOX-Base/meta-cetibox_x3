@@ -1,5 +1,15 @@
 [Unit]
 Description=Configure the MOST INIC after drivers were loaded.
+After=sys-devices-virtual-most-mostcore-devices-mdev0.device
+After=sys-devices-virtual-most-mostcore-devices-mdev1.device
+After=sys-devices-virtual-most-mostcore-devices-mdev2.device
+Wants=sys-devices-virtual-most-mostcore-devices-mdev0.device
+Wants=sys-devices-virtual-most-mostcore-devices-mdev1.device
+Wants=sys-devices-virtual-most-mostcore-devices-mdev2.device
 
 [Service]
+Type=oneshot
 ExecStart=/usr/bin/most-driver-setup-channels.sh
+
+[Install]
+WantedBy=multi-user.target
