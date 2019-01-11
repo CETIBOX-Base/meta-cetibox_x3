@@ -21,7 +21,7 @@ SRC_URI = " \
 
 SRCREV = "c5f4cfe9ecaa6fb5a85c90a4a659775478a1e7f8"
 
-DEPENDS = "libxml2"
+DEPENDS = "libxml2 kernel-module-sja1105-spi"
 
 RDEPENDS_${PN}_append = " kernel-module-sja1105-spi"
 
