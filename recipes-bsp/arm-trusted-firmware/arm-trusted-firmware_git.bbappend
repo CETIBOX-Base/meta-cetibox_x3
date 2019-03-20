@@ -9,6 +9,11 @@ SRC_URI_append = " \
 	file://0002-dont-set-gp2-13-and-gp2-14-for-peripheral-usage.patch \
 "
 
+# Use newer version from renesas github to fix DDR/QoS settings issue
+PV = "v1.5+renesas+git${SRCPV}"
+SRCREV = "11761c9d006eca58b417ef2c1a694caf42c25352"
+LIC_FILES_CHKSUM = "file://license.rst;md5=e927e02bca647e14efd87e9e914b2443"
+
 do_compile_append() {
 	objcopy -I srec -O binary ${S}/tools/dummy_create/bootparam_sa0.srec ${S}/tools/dummy_create/bootparam_sa0.bin
 	objcopy -I srec -O binary ${S}/tools/dummy_create/cert_header_sa6.srec ${S}/tools/dummy_create/cert_header_sa6.bin
