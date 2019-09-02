@@ -26,6 +26,6 @@ do_install() {
 PACKAGES = "${PN}"
 FILES_${PN} = "${includedir}/linux-cetibox/*"
 
-LINUX_VERSION ?= "4.14.134"
+LINUX_VERSION ?= "4.14.141"
 PV = "${LINUX_VERSION}"
 PR = "r1"
