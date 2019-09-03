@@ -3,22 +3,27 @@ require recipes-core/images/core-image-minimal.bb
 
 IMAGE_FEATURES += "ssh-server-dropbear"
 
+# In the following list, please put exactly one item per line, indent with
+# exactly one tab, place exactly one space between the item and the back-slash
+# escaping the end of line and KEEP THE LIST IN LEXICOGRAPHIC ORDER.  This way,
+# automatic merges will function smoothly.
+
 IMAGE_INSTALL_append = " \
+	coreutils \
 	iproute2 \
-	iproute2-tc \
 	iproute2-ss \
+	iproute2-tc \
+	kernel-firmware-r8a779x-usb3 \
 	kernel-modules \
 	most-driver \
-	coreutils \
-	openssh-sftp-server \
-	u-boot-fw-utils \
-	sja1105-tool \
 	networkmanager \
+	openssh-sftp-server \
 	phytool \
-	set-led \
 	rsync \
+	set-led \
+	sja1105-tool \
 	tcpdump \
-	kernel-firmware-r8a779x-usb3 \
+	u-boot-fw-utils \
 	udev-rules \
 "
 
