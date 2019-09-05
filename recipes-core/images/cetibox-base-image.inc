@@ -13,7 +13,9 @@ IMAGE_INSTALL_append = " \
 	iproute2 \
 	iproute2-ss \
 	iproute2-tc \
+	iw \
 	kernel-firmware-r8a779x-usb3 \
+	kernel-firmware-wl18xx \
 	kernel-modules \
 	most-driver \
 	networkmanager \
