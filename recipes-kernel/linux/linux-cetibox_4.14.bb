@@ -7,7 +7,7 @@ require recipes-kernel/linux/linux-yocto.inc
 PROVIDES += "linux-renesas"
 
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}/:"
-COMPATIBLE_MACHINE = "cetibox-m3ulcb|cetibox-h3ulcb"
+COMPATIBLE_MACHINE = "cetibox-h3ulcb"
 
 # The internal CETiTEC git repository for the linux kernel. The probably most
 # important parameter is 'protocol', which defines the protocol being used for
