@@ -2,7 +2,7 @@ LICENSE = "GPLv2"
 
 LIC_FILES_CHKSUM = "file://COPYING;md5=d7810fab7487fb0aad327b76f1be7cd7"
 
-COMPATIBLE_MACHINE = "cetibox-m3ulcb|cetibox-h3ulcb"
+COMPATIBLE_MACHINE = "cetibox-h3"
 
 do_configure[depends] += "virtual/kernel:do_shared_workdir"
 

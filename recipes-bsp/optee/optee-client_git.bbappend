@@ -1,1 +1,1 @@
-COMPATIBLE_MACHINE =. "|cetibox-h3ulcb|cetibox-vc2"
+COMPATIBLE_MACHINE =. "|cetibox-h3"

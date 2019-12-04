@@ -7,7 +7,7 @@ require recipes-kernel/linux/linux-yocto.inc
 PROVIDES += "linux-renesas"
 
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}/:"
-COMPATIBLE_MACHINE = "cetibox-h3ulcb"
+COMPATIBLE_MACHINE = "cetibox-h3"
 
 # The internal CETiTEC git repository for the linux kernel. The probably most
 # important parameter is 'protocol', which defines the protocol being used for
@@ -49,7 +49,6 @@ PR = "r1"
 #       We now provide a _real_ defconfig within the kernel source tree and
 #       take care that the 'configme' does not interfere anymore in an unwanted
 #       way. See also the notes on 'KCONFIG_MODE'.
-#KBUILD_DEFCONFIG_cetibox-h3ulcb = "cetibox_x3_defconfig"
 KBUILD_DEFCONFIG = "cetibox_x3_defconfig"
 
 # This is an undocumented configuration variable which influences the behaviour
