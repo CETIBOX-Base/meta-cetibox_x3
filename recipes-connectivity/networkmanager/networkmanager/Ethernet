@@ -9,5 +9,5 @@ address1=10.0.0.1/24
 method=manual
 
 [ipv6]
-address1=fec0::1/48
+address1=fd00:ce7:17ec::1/64
 method=manual
