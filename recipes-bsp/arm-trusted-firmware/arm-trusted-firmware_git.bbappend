@@ -19,7 +19,7 @@ python do_extra_ipl_opt_append() {
     if soc == "r8a7795":
         # Build firmware for CETiBox VC2 with integrated H3 SOP
         d.setVar('EXTRA_ATFW_CONF', 'vc2')
-        d.setVar('EXTRA_ATFW_OPT', ' LSI=H3 RCAR_DRAM_SPLIT=1 RCAR_DRAM_LPDDR4_MEMCONF=0 ${ATFW_OPT_LOSSY} RCAR_SYSTEM_SUSPEND=0')
+        d.setVar('EXTRA_ATFW_OPT', ' LSI=H3 RCAR_DRAM_SPLIT=1 RCAR_DRAM_LPDDR4_MEMCONF=0 RCAR_SYSTEM_SUSPEND=0 RCAR_DISABLE_NONSECURE_RPC_ACCESS=0 LIFEC_DBSC_PROTECT_ENABLE=0')
         bb.build.exec_func('do_ipl_opt_compile', d)
         bb.build.exec_func('do_ipl_opt_deploy', d)
 }
