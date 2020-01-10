@@ -21,7 +21,7 @@ CETIBOX_KERNEL_URL = "git://github.com/CETIBOX-Base/linux.git;protocol=https"
 #CETIBOX_KERNEL_URL = "git:///home/ubuntu/data/git/cetibox_x3/dev/code/components/linux/kernel"
 
 # Use the update_submodule_recipes.sh script to update this revision
-SRCREV = "2beaff7bfe96158f3c97665e802bc45159227061"
+SRCREV = "5fcb139c70e2e125065749debdcda0c721db2b0e"
 
 # For development work, it can be useful to refer to the branch tip instead of a
 # fixed commit. To enable this, uncomment the following lines and comment out the
