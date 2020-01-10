@@ -7,7 +7,7 @@ require recipes-kernel/linux/linux-yocto.inc
 PROVIDES += "linux-renesas"
 
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}/:"
-COMPATIBLE_MACHINE = "cetibox-h3ulcb"
+COMPATIBLE_MACHINE = "cetibox-h3"
 
 # The internal CETiTEC git repository for the linux kernel. The probably most
 # important parameter is 'protocol', which defines the protocol being used for
@@ -21,7 +21,7 @@ CETIBOX_KERNEL_URL = "git://github.com/CETIBOX-Base/linux.git;protocol=https"
 #CETIBOX_KERNEL_URL = "git:///home/ubuntu/data/git/cetibox_x3/dev/code/components/linux/kernel"
 
 # Use the update_submodule_recipes.sh script to update this revision
-SRCREV = "e8eb31b8115c2b7e565fe43f0a046e2976d2e9ee"
+SRCREV = "eb807627504db22ce879ca8cfeb6af828c08903f"
 
 # For development work, it can be useful to refer to the branch tip instead of a
 # fixed commit. To enable this, uncomment the following lines and comment out the
@@ -49,7 +49,6 @@ PR = "r1"
 #       We now provide a _real_ defconfig within the kernel source tree and
 #       take care that the 'configme' does not interfere anymore in an unwanted
 #       way. See also the notes on 'KCONFIG_MODE'.
-#KBUILD_DEFCONFIG_cetibox-h3ulcb = "cetibox_x3_defconfig"
 KBUILD_DEFCONFIG = "cetibox_x3_defconfig"
 
 # This is an undocumented configuration variable which influences the behaviour
@@ -79,10 +78,15 @@ addtask do_clean_defconfig after do_unpack before do_kernel_metadata
 USB3_FIRMWARE_V2 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/r8a779x_usb3_v2.dlmem;md5sum=645db7e9056029efa15f158e51cc8a11"
 USB3_FIRMWARE_V3 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/r8a779x_usb3_v3.dlmem;md5sum=687d5d42f38f9850f8d5a6071dca3109"
 
+# Install TI WLAN firmware to rootfs
+WL18XX_FW_4 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ti-connectivity/wl18xx-fw-4.bin;md5sum=ccd2e2116451bd77ac267ac967cf383d"
+
 SRC_URI_append = " \
     ${USB3_FIRMWARE_V2} \
     ${USB3_FIRMWARE_V3} \
+	${WL18XX_FW_4} \
 	file://firmware.conf \
+	file://wl18xx-conf.bin \
 "
 
 do_download_firmware () {
@@ -101,11 +105,15 @@ do_compile_append() {
 do_install_append () {
 	install -d ${D}${nonarch_base_libdir}/firmware
 	install -m 755 ${WORKDIR}/r8a779x_usb3_v*.dlmem ${D}${nonarch_base_libdir}/firmware
+	install -m 755 -d ${D}${nonarch_base_libdir}/firmware/ti-connectivity
+	install -m 755 ${WORKDIR}/wl18xx-conf.bin ${D}${nonarch_base_libdir}/firmware/ti-connectivity
+	install -m 755 ${WORKDIR}/wl18xx-fw-4.bin ${D}${nonarch_base_libdir}/firmware/ti-connectivity
 
 	install -D -m 644 ${B}/firmware.img ${D}/boot/firmware.img
 }
 
-PACKAGES_append = " kernel-firmware-r8a779x-usb3"
+PACKAGES_append = " kernel-firmware-r8a779x-usb3 kernel-firmware-wl18xx"
 FILES_kernel-firmware-r8a779x-usb3 = "${nonarch_base_libdir}/firmware/r8a779x_usb3_v*.dlmem"
+FILES_kernel-firmware-wl18xx = "${nonarch_base_libdir}/firmware/ti-connectivity/wl*.bin"
 
 FILES_kernel-image_append = "boot/firmware.img"

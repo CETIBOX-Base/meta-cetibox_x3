@@ -1,2 +1,1 @@
-MMNGR_CFG_cetibox-h3ulcb = "MMNGR_SALVATORX"
-MMNGR_CFG_cetibox-m3ulcb = "MMNGR_SALVATORX"
+MMNGR_CFG_cetibox-h3 = "MMNGR_SALVATORX"
