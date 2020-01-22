@@ -1,8 +1,20 @@
+From 068ac0eb0012cbea2a6d6bac553e0b9a5f858656 Mon Sep 17 00:00:00 2001
+From: Matthias Blankertz <matthias.blankertz@cetitec.com>
+Date: Tue, 8 May 2018 16:45:49 +0200
+ 0002-dont-set-gp2-13-and-gp2-14-for-peripheral-usage.patch
+
+---
+ plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c | 4 +---
+ plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c | 4 +---
+ plat/renesas/rcar/pfc/M3/pfc_init_m3.c    | 4 +---
+ plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c  | 4 +---
+ 4 files changed, 4 insertions(+), 12 deletions(-)
+
 diff --git a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c
-index ca62ad96..48a0d167 100644
+index 65003af..8243c78 100644
 --- a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c
 +++ b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v1.c
-@@ -1027,9 +1027,7 @@ void pfc_init_h3_v1(void)
+@@ -995,9 +995,7 @@ void pfc_init_h3_v1(void)
  			       | GPSR1_A2
  			       | GPSR1_A1
  			       | GPSR1_A0);
@@ -14,10 +26,10 @@ index ca62ad96..48a0d167 100644
  			       | GPSR2_AVB_MDC
  			       | GPSR2_PWM2_A
 diff --git a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
-index 9bff0861..e6e95904 100644
+index 0d5b7b7..75fb2c8 100644
 --- a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
 +++ b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
-@@ -1076,9 +1076,7 @@ void pfc_init_h3_v2(void)
+@@ -1042,9 +1042,7 @@ void pfc_init_h3_v2(void)
  			       | GPSR1_A2
  			       | GPSR1_A1
  			       | GPSR1_A0);
@@ -29,10 +41,10 @@ index 9bff0861..e6e95904 100644
  			       | GPSR2_AVB_MDC
  			       | GPSR2_PWM2_A
 diff --git a/plat/renesas/rcar/pfc/M3/pfc_init_m3.c b/plat/renesas/rcar/pfc/M3/pfc_init_m3.c
-index c060d0f1..851a7112 100644
+index cc00b39..85b3943 100644
 --- a/plat/renesas/rcar/pfc/M3/pfc_init_m3.c
 +++ b/plat/renesas/rcar/pfc/M3/pfc_init_m3.c
-@@ -1160,9 +1160,7 @@ void pfc_init_m3(void)
+@@ -1123,9 +1123,7 @@ void pfc_init_m3(void)
  			       | GPSR1_A2
  			       | GPSR1_A1
  			       | GPSR1_A0);
@@ -44,10 +56,10 @@ index c060d0f1..851a7112 100644
  			       | GPSR2_AVB_MDC
  			       | GPSR2_PWM2_A
 diff --git a/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c b/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c
-index 82281fd5..eabeafb3 100644
+index 768aba6..bf746e4 100644
 --- a/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c
 +++ b/plat/renesas/rcar/pfc/M3N/pfc_init_m3n.c
-@@ -1063,9 +1063,7 @@ void pfc_init_m3n(void)
+@@ -1030,9 +1030,7 @@ void pfc_init_m3n(void)
  			       | GPSR1_A2
  			       | GPSR1_A1
  			       | GPSR1_A0);
