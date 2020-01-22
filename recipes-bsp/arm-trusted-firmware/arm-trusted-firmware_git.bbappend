@@ -2,7 +2,7 @@ FILESEXTRAPATHS_prepend := "${THISDIR}/files:"
 
 COMPATIBLE_MACHINE =. "|cetibox-h3"
 
-ATFW_OPT_append = " ${@base_conditional("CA57CA53BOOT", "1", " PSCI_DISABLE_BIGLITTLE_IN_CA57BOOT=0", "", d)}"
+ATFW_OPT_append = " ${@oe.utils.conditional("CA57CA53BOOT", "1", " PSCI_DISABLE_BIGLITTLE_IN_CA57BOOT=0", "", d)}"
 ATFW_OPT_append += " RCAR_DISABLE_NONSECURE_RPC_ACCESS=0"
 ATFW_OPT_append += " LIFEC_DBSC_PROTECT_ENABLE=0"
 
