@@ -5,7 +5,7 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=bac7a51138672c261de0ab4017b7c396"
 
 inherit pkgconfig systemd
 
-PV = "1.0-ctc"
+PV = "1.1-ctc"
 S = "${WORKDIR}/git"
 
 SRC_URI = " \
@@ -24,6 +24,8 @@ SRCREV = "c5f4cfe9ecaa6fb5a85c90a4a659775478a1e7f8"
 DEPENDS = "libxml2 kernel-module-sja1105-spi phytool"
 
 RDEPENDS_${PN}_append = " kernel-module-sja1105-spi phytool"
+
+CFLAGS_append = " -Wno-error=array-bounds"
 
 SYSTEMD_PACKAGES = "${PN}"
 SYSTEMD_SERVICE_${PN} = " \
