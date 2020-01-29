@@ -112,8 +112,8 @@ do_install_append () {
 	install -D -m 644 ${B}/firmware.img ${D}/boot/firmware.img
 }
 
-PACKAGES_append = " kernel-firmware-r8a779x-usb3 kernel-firmware-wl18xx"
-FILES_kernel-firmware-r8a779x-usb3 = "${nonarch_base_libdir}/firmware/r8a779x_usb3_v*.dlmem"
-FILES_kernel-firmware-wl18xx = "${nonarch_base_libdir}/firmware/ti-connectivity/wl*.bin"
+PACKAGES_append = " ${KERNEL_PACKAGE_NAME}-firmware-r8a779x-usb3 ${KERNEL_PACKAGE_NAME}-firmware-wl18xx"
+FILES_${KERNEL_PACKAGE_NAME}-firmware-r8a779x-usb3 = "${nonarch_base_libdir}/firmware/r8a779x_usb3_v*.dlmem"
+FILES_${KERNEL_PACKAGE_NAME}-firmware-wl18xx = "${nonarch_base_libdir}/firmware/ti-connectivity/wl*.bin"
 
-FILES_kernel-image_append = "boot/firmware.img"
+FILES_${KERNEL_PACKAGE_NAME}-image_append = "boot/firmware.img"

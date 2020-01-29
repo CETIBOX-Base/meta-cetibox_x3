@@ -1,6 +1,8 @@
 require recipes-graphics/images/core-image-renesas-base.inc
 require recipes-core/images/core-image-minimal.bb
 
+COMPATIBLE_MACHINE = "cetibox-h3"
+
 IMAGE_FEATURES += "ssh-server-dropbear"
 
 # In the following list, please put exactly one item per line, indent with

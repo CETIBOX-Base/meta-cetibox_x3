@@ -18,7 +18,6 @@ IMAGE_INSTALL_append = " \
 	python3-setuptools \
 	python-argparse \
 	python-ctypes \
-	python-importlib \
 	python-misc \
 	python-smbus \
 	python-subprocess \
