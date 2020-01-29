@@ -11,8 +11,6 @@ BBLAYERS ?= " \
   ##OEROOT##/meta-poky \
   ##OEROOT##/meta-yocto-bsp \
   ##OEROOT##/../meta-renesas/meta-rcar-gen3 \
-  ##OEROOT##/../meta-linaro/meta-linaro-toolchain \
-  ##OEROOT##/../meta-linaro/meta-optee \
   ##OEROOT##/../meta-openembedded/meta-oe \
   ##OEROOT##/../meta-openembedded/meta-python \
   ##OEROOT##/../meta-openembedded/meta-networking \
