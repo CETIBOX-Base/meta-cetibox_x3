@@ -13,20 +13,21 @@ IMAGE_INSTALL_append = " \
 	glibc-dbg \
 	i2c-tools \
 	less \
+	netcat-openbsd \
 	procps \
-	python3-can \
-	python3-setuptools \
 	python-argparse \
 	python-ctypes \
 	python-misc \
 	python-smbus \
 	python-subprocess \
 	python-terminal \
+	python3-can \
+	python3-setuptools \
 	tcpdump \
 	tmux \
 	udev-rules \
 	usbutils \
-	vim \
 	v4l-utils \
 	valgrind \
+	vim \
 "
