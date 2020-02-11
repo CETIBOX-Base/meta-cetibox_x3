@@ -1,5 +1,5 @@
 # Install additional debugging and development tools
-IMAGE_FEATURES += "dev-pkgs tools-debug tools-testapps tools-profile debug-tweaks"
+IMAGE_FEATURES += "tools-debug tools-testapps tools-profile debug-tweaks"
 
 # In the following list, please put exactly one item per line, indent with
 # exactly one tab, place exactly one space between the item and the back-slash
