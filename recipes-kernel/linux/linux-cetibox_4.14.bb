@@ -66,13 +66,11 @@ LINUX_VERSION_EXTENSION = "-cetibox"
 # user has lying around in their working copy. The existence of any of
 # these files causes the build process to use these files instead of
 # the desired configuration from arch/arm64/configs/cetibox_x3_defconfig.
-do_clean_defconfig () {
+do_kernel_metadata_prepend () {
 	rm -f ${WORKDIR}/defconfig
 	rm -f ${S}/defconfig
 	rm -f ${S}/.config
 }
-
-addtask do_clean_defconfig after do_unpack before do_kernel_metadata
 
 # Install USB3.0 firmware to rootfs
 USB3_FIRMWARE_V2 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/r8a779x_usb3_v2.dlmem;md5sum=645db7e9056029efa15f158e51cc8a11"
