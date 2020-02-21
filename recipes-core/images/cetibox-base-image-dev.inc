@@ -23,10 +23,12 @@ IMAGE_INSTALL_append = " \
 	python-terminal \
 	python3-can \
 	python3-setuptools \
+	sshfs-fuse \
 	tcpdump \
 	tmux \
 	udev-rules \
 	usbutils \
+	util-linux \
 	v4l-utils \
 	valgrind \
 	vim \
