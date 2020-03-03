@@ -7,8 +7,9 @@ ATFW_OPT_append += " RCAR_DISABLE_NONSECURE_RPC_ACCESS=0"
 ATFW_OPT_append += " LIFEC_DBSC_PROTECT_ENABLE=0"
 
 SRC_URI_append = " \
-    file://0001-plat-renesas-rcar-Make-RPC-secure-settings-optional.patch \
+	file://0001-plat-renesas-rcar-Make-RPC-secure-settings-optional.patch \
 	file://0002-dont-set-gp2-13-and-gp2-14-for-peripheral-usage.patch \
+	file://0003-dont-set-gp2-7-to-pwm.patch \
 "
 
 # Build firmware for CETiBox with H3ULCB
@@ -31,7 +32,7 @@ do_compile_append() {
 
 do_deploy_append() {
 	install -m 0644 ${S}/tools/dummy_create/bootparam_sa0.bin ${DEPLOYDIR}/bootparam_sa0.bin
-    install -m 0644 ${S}/tools/dummy_create/cert_header_sa6.bin ${DEPLOYDIR}/cert_header_sa6.bin
+	install -m 0644 ${S}/tools/dummy_create/cert_header_sa6.bin ${DEPLOYDIR}/cert_header_sa6.bin
 }
 
 do_ipl_opt_compile_append() {
@@ -41,5 +42,5 @@ do_ipl_opt_compile_append() {
 
 do_ipl_opt_deploy_append() {
 	install -m 0644 ${S}/tools/dummy_create/bootparam_sa0.bin ${DEPLOYDIR}/bootparam_sa0-${EXTRA_ATFW_CONF}.bin
-    install -m 0644 ${S}/tools/dummy_create/cert_header_sa6.bin ${DEPLOYDIR}/cert_header_sa6-${EXTRA_ATFW_CONF}.bin
+	install -m 0644 ${S}/tools/dummy_create/cert_header_sa6.bin ${DEPLOYDIR}/cert_header_sa6-${EXTRA_ATFW_CONF}.bin
 }

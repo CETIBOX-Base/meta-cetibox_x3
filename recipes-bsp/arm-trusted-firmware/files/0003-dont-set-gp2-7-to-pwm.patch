@@ -1,0 +1,12 @@
+diff --git a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
+index 0d5b7b70..492e392a 100644
+--- a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
++++ b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
+@@ -1048,7 +1048,6 @@ void pfc_init_h3_v2(void)
+ 			       | GPSR2_AVB_PHY_INT
+ 			       | GPSR2_AVB_MDC
+ 			       | GPSR2_PWM2_A
+-			       | GPSR2_PWM1_A
+ 			       | GPSR2_IRQ5
+ 			       | GPSR2_IRQ4
+ 			       | GPSR2_IRQ3
