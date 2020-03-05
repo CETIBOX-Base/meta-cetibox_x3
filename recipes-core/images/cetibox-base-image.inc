@@ -3,8 +3,7 @@ require recipes-core/images/core-image-minimal.bb
 
 COMPATIBLE_MACHINE = "cetibox-h3"
 
-IMAGE_FEATURES += "ssh-server-dropbear allow-root-login read-only-rootfs"
-ROOTFS_POSTPROCESS_COMMAND_remove = "read_only_rootfs_hook; "
+IMAGE_FEATURES += "ssh-server-dropbear allow-root-login"
 IMAGE_LINGUAS = "en-us de-de"
 
 # In the following list, please put exactly one item per line, indent with
