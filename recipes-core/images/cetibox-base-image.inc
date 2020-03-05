@@ -4,6 +4,8 @@ require recipes-core/images/core-image-minimal.bb
 COMPATIBLE_MACHINE = "cetibox-h3"
 
 IMAGE_FEATURES += "ssh-server-dropbear allow-root-login read-only-rootfs"
+ROOTFS_POSTPROCESS_COMMAND_remove = "read_only_rootfs_hook; "
+IMAGE_LINGUAS = "en-us de-de"
 
 # In the following list, please put exactly one item per line, indent with
 # exactly one tab, place exactly one space between the item and the back-slash
@@ -11,6 +13,7 @@ IMAGE_FEATURES += "ssh-server-dropbear allow-root-login read-only-rootfs"
 # automatic merges will function smoothly.
 
 IMAGE_INSTALL_append = " \
+	base-conf \
 	coreutils \
 	iproute2 \
 	iproute2-ss \

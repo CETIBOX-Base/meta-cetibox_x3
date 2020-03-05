@@ -262,3 +262,4 @@ BBMASK = "meta-linaro/meta-optee/recipes-security/optee"
 # firmware images must be flashed to the target if this option was changed.
 CA57CA53BOOT = "1"
 
+GLIBC_GENERATE_LOCALES = "en_US.UTF-8 de_DE.UTF-8"
