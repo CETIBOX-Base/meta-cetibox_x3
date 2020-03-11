@@ -11,6 +11,7 @@ IMAGE_INSTALL_append = " \
 	devmem2 \
 	ethtool \
 	glibc-dbg \
+	glibc-utils \
 	i2c-tools \
 	less \
 	netcat-openbsd \

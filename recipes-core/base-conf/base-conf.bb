@@ -4,10 +4,12 @@ DESCRIPTION = "Misc. basic configuration files for CETiBox"
 
 SRC_URI = " \
 	file://locale.conf \
+	file://set_lang.sh \
 "
 
 do_install() {
 	install -D -m 644 ${WORKDIR}/locale.conf ${D}${sysconfdir}/locale.conf
+	install -D -m 644 ${WORKDIR}/set_lang.sh ${D}${sysconfdir}/profile.d/set_lang.sh
 }
 
 # Create groups at build time otherwise created by sysusers.d at first
