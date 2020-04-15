@@ -34,7 +34,7 @@ BRANCH = "v4.14/rcar-3.9-ctc"
 #SRC_URI = "${CETIBOX_KERNEL_URL};nocheckout=1;rev=${SRCREV};nobranch=1"
 SRC_URI = "${CETIBOX_KERNEL_URL};nocheckout=1;rev=${SRCREV};branch=${BRANCH}"
 
-LINUX_VERSION ?= "4.14.174"
+LINUX_VERSION ?= "4.14.176"
 PV = "${LINUX_VERSION}+git${SRCPV}"
 PR = "r1"
 
