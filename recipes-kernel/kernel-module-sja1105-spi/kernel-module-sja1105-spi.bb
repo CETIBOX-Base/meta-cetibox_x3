@@ -5,6 +5,7 @@ SRC_URI = " \
 	file://Makefile \
 	file://switch-spi.c \
 	file://sja1105.h \
+	file://kthread_settings.h \
 	file://sja1105_spi.rules \
 "
 
