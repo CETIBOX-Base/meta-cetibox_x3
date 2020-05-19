@@ -1,3 +1,7 @@
+IMAGE_INSTALL_append = " \
+	sja1105-config-baselevel \
+"
+
 # Uncomment the following lines to install the UGW evaluation version to your
 # image. Note that you need to copy the binary tarball 'UgwEval.tar' to the
 # 'files' directory of the ugw-eval recipe.
