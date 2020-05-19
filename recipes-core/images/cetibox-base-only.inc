@@ -1,4 +1,5 @@
 IMAGE_INSTALL_append = " \
+	networkmanager-config-baselevel \
 	sja1105-config-baselevel \
 "
 
