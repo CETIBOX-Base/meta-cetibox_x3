@@ -19,7 +19,7 @@ SRC_URI = " \
 	file://default-switch2.xml \
 "
 
-SRCREV = "c5f4cfe9ecaa6fb5a85c90a4a659775478a1e7f8"
+SRCREV = "e14a6bb6030733d4b974cdc5142a52d389510498"
 
 DEPENDS = "libxml2 kernel-module-sja1105-spi phytool"
 
