@@ -1,0 +1,76 @@
+From ccfdd0c21277e69da8e6ebc8f8795c93d9fbca0d Mon Sep 17 00:00:00 2001
+From: Matthias Blankertz <matthias.blankertz@cetitec.com>
+Date: Wed, 27 May 2020 09:31:50 +0200
+Subject: [PATCH] Add fb-close; Use /dev/tty0 (current VT) for open
+
+---
+ Makefile   |  2 +-
+ common.c   |  5 +++--
+ fb-close.c | 23 +++++++++++++++++++++++
+ 3 files changed, 27 insertions(+), 3 deletions(-)
+ create mode 100644 fb-close.c
+
+diff --git a/Makefile b/Makefile
+index ef786a2..875d1e1 100644
+--- a/Makefile
++++ b/Makefile
+@@ -16,7 +16,7 @@ override CFLAGS += -DPATCHLEVEL=$(PATCHLEVEL)
+ override CFLAGS += -DSUBLEVEL=$(SUBLEVEL)
+ override CFLAGS += -DVERSION_NAME=\"$(NAME)\"
+ 
+-PROGS=perf rect fb-test offset fb-string
++PROGS=perf rect fb-test offset fb-string fb-close
+ 
+ all: $(PROGS)
+ 
+diff --git a/common.c b/common.c
+index a341dbe..c7e8b01 100644
+--- a/common.c
++++ b/common.c
+@@ -40,11 +40,12 @@ void fb_open(int fb_num, struct fb_info *fb_info)
+ 	char str[64];
+ 	int fd,tty;
+ 
+-	tty = open("/dev/tty1", O_RDWR);
++	tty = open("/dev/tty0", O_RDWR);
+ 
+ 	if(ioctl(tty, KDSETMODE, KD_GRAPHICS) == -1)
+-		printf("Failed to set graphics mode on tty1\n");
++		printf("Failed to set graphics mode on current VT\n");
+ 
++	close(tty);
+ 	sprintf(str, "/dev/fb%d", fb_num);
+ 	fd = open(str, O_RDWR);
+ 
+diff --git a/fb-close.c b/fb-close.c
+new file mode 100644
+index 0000000..fb28a22
+--- /dev/null
++++ b/fb-close.c
+@@ -0,0 +1,23 @@
++#include <fcntl.h>
++#include <linux/kd.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <sys/ioctl.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++int main(int argc, char *argv[])
++{
++	int tty = open("/dev/tty0", O_RDWR);
++        if (tty < 0) {
++                printf("Failed to open current VT");
++		return EXIT_FAILURE;
++	}
++        if (ioctl(tty, KDSETMODE, KD_TEXT) == -1) {
++                printf("Failed to restore text mode on current VT");
++		return EXIT_FAILURE;
++	}
++
++	close(tty);
++	return EXIT_SUCCESS;
++}
+-- 
+2.26.2
+
