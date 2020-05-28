@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 CETITEC GmbH
+ * Copyright (c) 2017-2020 CETITEC GmbH
  *
  * This software is licensed under the terms of the GNU General Public License
  * (GPL) Version 2.
@@ -33,20 +33,31 @@
 #include <linux/version.h>
 #include <linux/of_mdio.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <uapi/linux/sched/types.h>
+#endif
+
 #include <linux/spi/spi.h>
 #include <linux/spi/spidev.h>
 
+#include "kthread_settings.h"
 #include "sja1105.h"
+
 
 #define SJA1105_SPI_MAX_CHARDEVS 2
 
-#define SJA1105_SPI_SPEED_HZ 500000
+#define SJA1105_SPI_SPEED_HZ 10000000
 
 #define SJA1105_SPI_BUFSIZE (PAGE_SIZE / 2)
 
 #if SJA1105_SPI_BUFSIZE > (PAGE_SIZE / 2)
 #error Unsupported buffer size.
 #endif
+
+#define USER_BUF_LEN PAGE_SIZE
+#define PHY_BUF_LEN ALIGN(7*8, ARCH_DMA_MINALIGN)
+#define API_BUF_LEN ALIGN((SWITCH_PORTS*2+1)*8, ARCH_DMA_MINALIGN)
+#define POLL_BUF_LEN ALIGN(21*8, ARCH_DMA_MINALIGN)
 
 struct sja1105_phy {
 	struct net_device netdev;
@@ -64,6 +75,8 @@ static struct class *sja1105_spi_class;
 
 static DEFINE_MUTEX(minor_lock);
 static struct sja1105_spi *sja_by_minor[SJA1105_SPI_MAX_CHARDEVS];
+
+static atomic_t spi_sync_count = ATOMIC_INIT(0);
 
 #define SPI_MODE_MASK (SPI_CPHA | SPI_CPOL | SPI_CS_HIGH          \
                        | SPI_LSB_FIRST | SPI_3WIRE | SPI_LOOP     \
@@ -100,27 +113,24 @@ static struct spi_driver sja1105_spi_driver = {
 	.remove = sja1105_spi_remove,
 };
 
-static int write_port_speed(struct sja1105_spi *sja, struct sja1105_phy *phy);
+static int write_port_speed(struct sja1105_spi *sja, struct spi_device *spi, struct sja1105_phy *phy);
 static bool port_is_up(struct sja1105_spi *sja, unsigned portnumber);
 
 static int init_sja_message(struct sja1105_spi *sja,
                             struct sja1105_transfer xfers[],
                             size_t tcount,
                             struct spi_message *m,
-                            struct spi_transfer *transfers)
+                            struct spi_transfer *transfers,
+							char *buffer, size_t bufferlen)
 {
 	int i;
 	size_t offset = 0;
 
-	if (!m || !transfers) {
+	if (!m || !transfers || !buffer) {
 		return -EINVAL;
 	}
 
 	spi_message_init(m);
-
-	if (sja->txdma) {
-		m->is_dma_mapped = 1;
-	}
 
 	for (i = 0; i < tcount; i++) {
 		struct sja1105_transfer *xfer = &xfers[i];
@@ -133,29 +143,29 @@ static int init_sja_message(struct sja1105_spi *sja,
 		}
 
 		t->len = (xfer->count + 1) * sizeof(uint32_t);
+		if (offset+2*t->len > bufferlen) {
+			pr_err("Transfer size exceeds buffer!\n");
+			return -EINVAL;
+		}
+
 		t->cs_change = (i < tcount - 1) ? 1 : 0;
 		t->tx_nbits = 0;
 		t->rx_nbits = 0;
 		t->bits_per_word = 32;
 		t->delay_usecs = 0;
-		t->speed_hz = 500000;
+		t->speed_hz = SJA1105_SPI_SPEED_HZ;
 
 		if (xfer->read) {
-			t->rx_buf = (void *)(sja->rxbuf + offset);
-			if (sja->rxdma) {
-				t->rx_dma = sja->rxdma + offset;
-			}
+			t->rx_buf = (void *)(buffer + offset);
 			xfer->rxdata = ((uint32_t *)t->rx_buf) + 1;
 		} else {
 			t->rx_buf = NULL;
 			t->rx_dma = 0;
 		}
 
-		t->tx_buf = (const void *)(sja->txbuf + offset);
+		offset += t->len;
 
-		if (sja->txdma) {
-			t->tx_dma = sja->txdma + offset;
-		}
+		t->tx_buf = (const void *)(buffer + offset);
 
 		txbuf32 = (uint32_t *)t->tx_buf;
 		txbuf32[0] = SJA1105_SPI_CMD(xfer->write, xfer->count, xfer->addr);
@@ -168,119 +178,89 @@ static int init_sja_message(struct sja1105_spi *sja,
 	return 0;
 }
 
-/* Wait for next clkval being read from polling thread. 
-   The cb will then be called with a linked list of all list_entries passed via
-   this function until just before the corresponding SPI read. */
-void sja1105_spi_next_clkval_async(struct sja1105_spi *sja,
-                                   struct list_head *list_entry,
-                                   sja1105_spi_ts_completion cb, void *cb_ctx)
+#define PTPTSCLK_IDX 0
+#define CONFSTATUS_IDX 1
+#define STATUS_IDX 2
+#define MAC0IDX 3
+
+static struct spi_device* sja1105_get_spi(struct sja1105_spi *sja)
 {
+	struct spi_device *spi;
 	unsigned long flags;
+	if (!sja)
+		return NULL;
 
-	spin_lock_irqsave(&sja->ts_complete_lock, flags);
-
-	sja->ts_complete_cb = cb;
-	sja->ts_complete_ctx = cb_ctx;
-
-	if (list_entry) {
-		list_add_tail(list_entry, &sja->ts_complete_list);
-	} else {
-		INIT_LIST_HEAD(&sja->ts_complete_list);
-	}
-
-	spin_unlock_irqrestore(&sja->ts_complete_lock, flags);
+	spin_lock_irqsave(&sja->spi_lock, flags);
+	spi = spi_dev_get(sja->dev);
+	spin_unlock_irqrestore(&sja->spi_lock, flags);
+	return spi;
 }
-EXPORT_SYMBOL(sja1105_spi_next_clkval_async);
-
 
 static int do_poll(struct sja1105_spi *sja)
 {
 	int status;
+	struct spi_device *spi = sja1105_get_spi(sja);
 	struct spi_message m;
 
 	uint32_t *clkbuf;
-	uint32_t *tsbuf;
-	uint64_t clkval;
+	uint64_t clkval, old_clkval;
 	int i;
-	unsigned tsreg;
-	unsigned long flags;
-	sja1105_spi_ts_completion cb;
-	void *cb_ctx;
-	LIST_HEAD(local_list);
 	uint32_t *confstatbuf;
 #ifdef READ_SWITCH_STATUS
 	uint32_t *statusbuf;
 	uint32_t *mac0buf;
-	struct sja1105_transfer reads[5];
-	struct spi_transfer t[5];
+	struct sja1105_transfer reads[4];
+	struct spi_transfer t[4];
 #else
-	struct sja1105_transfer reads[3];
-	struct spi_transfer t[3];
+	struct sja1105_transfer reads[2];
+	struct spi_transfer t[2];
 #endif
 
-	/* Get all egress timestamps */
-	reads[0].addr = SJA1105_EGRESS_TIMESTAMPS;
-	reads[0].count = 10;
-	reads[0].read = true;
-	reads[0].write = false;
+	if (!spi) {
+		return -ESHUTDOWN;
+	}
 
 	/* Get current PTP clock time to recreate complete timestamps */
-	reads[1].addr = SJA1105_PTPTSCLK;
-	reads[1].count = 2;
-	reads[1].read = true;
-	reads[1].write = false;
+	reads[PTPTSCLK_IDX].addr = SJA1105_PTPTSCLK;
+	reads[PTPTSCLK_IDX].count = 2;
+	reads[PTPTSCLK_IDX].read = true;
+	reads[PTPTSCLK_IDX].write = false;
 
-	reads[2].addr = SJA1105_CONFSTATUS;
-	reads[2].count = 1;
-	reads[2].read = true;
-	reads[2].write = false;
+	reads[CONFSTATUS_IDX].addr = SJA1105_CONFSTATUS;
+	reads[CONFSTATUS_IDX].count = 1;
+	reads[CONFSTATUS_IDX].read = true;
+	reads[CONFSTATUS_IDX].write = false;
 
 #ifdef READ_SWITCH_STATUS
-	reads[3].addr = SJA1105_STATUS;
-	reads[3].count = 0xd;
-	reads[3].read = true;
-	reads[3].write = false;
+	reads[STATUS_IDX].addr = SJA1105_STATUS;
+	reads[STATUS_IDX].count = 0xd;
+	reads[STATUS_IDX].read = true;
+	reads[STATUS_IDX].write = false;
 
-	reads[4].addr = 0x201;
-	reads[4].count = 1;
-	reads[4].read = true;
-	reads[4].write = false;
+	reads[MAC0IDX].addr = 0x201;
+	reads[MAC0IDX].count = 1;
+	reads[MAC0IDX].read = true;
+	reads[MAC0IDX].write = false;
 #endif
 
-	mutex_lock(&sja->buf_lock);
-	status = init_sja_message(sja, reads, ARRAY_SIZE(reads), &m, t);
+	status = init_sja_message(sja, reads, ARRAY_SIZE(reads), &m, t,
+							  sja->poll_spi_buf, POLL_BUF_LEN);
 
 	if (status) {
 		pr_err("Couldn't create message\n");
 		goto done;
 	}
 
-	tsbuf = reads[0].rxdata;
-	clkbuf = reads[1].rxdata;
-	confstatbuf = reads[2].rxdata;
+	clkbuf = reads[PTPTSCLK_IDX].rxdata;
+	confstatbuf = reads[CONFSTATUS_IDX].rxdata;
 #ifdef READ_SWITCH_STATUS
-	statusbuf = reads[3].rxdata;
-	mac0buf = reads[4].rxdata;
+	statusbuf = reads[STATUS_IDX].rxdata;
+	mac0buf = reads[MAC0IDX].rxdata;
 #endif
 
-	/* Grab list of packets waiting for clkval *before* doing the
-	   SPI read. This ensures that the value is not read too early. */
-	spin_lock_irqsave(&sja->ts_complete_lock, flags);
-	if (!list_empty(&sja->ts_complete_list)) {
-		INIT_LIST_HEAD(&local_list);
-		list_splice_init(&sja->ts_complete_list, &local_list);
-		cb = sja->ts_complete_cb;
-		cb_ctx = sja->ts_complete_ctx;
-		// Reset cb
-		sja->ts_complete_cb = NULL;
-	} else {
-		cb = NULL;
-	}
-
-	spin_unlock_irqrestore(&sja->ts_complete_lock, flags);
-
 	/* Do spi transfer */
-	status = spi_sync(sja->dev, &m);
+	atomic_inc(&spi_sync_count);
+	status = spi_sync(spi, &m);
 
 	if (status < 0) {
 		pr_err("Couldn't send message (%d)\n", status);
@@ -288,6 +268,18 @@ static int do_poll(struct sja1105_spi *sja)
 	}
 
 	clkval = ((uint64_t)clkbuf[0]) | (((uint64_t)clkbuf[1]) << 32);
+	old_clkval = xchg_relaxed(&sja->clkval, clkval);
+	if (sja->switch_confd) {
+		if (old_clkval > clkval) {
+			pr_info("Switch clock wrapped or reset (old: %llu new: %llu)\n",
+					old_clkval, clkval);
+		} else if (clkval - old_clkval > (1<<23)-1) {
+			pr_warn("Switch clock: Elapsed > half epoch (old: %llu new: %llu)\n",
+					old_clkval, clkval);
+		} else {
+			smp_store_release(&sja->clkval_valid, true);
+		}
+	}
 
 	{
 		static unsigned c = 0;
@@ -308,10 +300,12 @@ static int do_poll(struct sja1105_spi *sja)
 			   all dynamic ports with the current PHY link speed */
 			for(i = 0;i < sja->num_phys;++i) {
 				if (sja->phys[i].last_speed) {
-					if (write_port_speed(sja, &sja->phys[i]) != 0) {
+					mutex_lock(&sja->phy_lock);
+					if (write_port_speed(sja, spi, &sja->phys[i]) != 0) {
 						dev_warn(&sja->phys[i].netdev.dev,
 								 "Could not set port speed\n");
 					}
+					mutex_unlock(&sja->phy_lock);
 				}
 			}
 
@@ -345,59 +339,33 @@ static int do_poll(struct sja1105_spi *sja)
 	}
 #endif
 
-	for (i = 0; i < SWITCH_PORTS; i++) {
-		for (tsreg = 0; tsreg < 2; tsreg++) {
-			uint32_t *reg = &tsbuf[2 * i + tsreg];
-
-			if (*reg & 0x1) {
-				/* Do not lock ts (for now). Complete/wait acts as barriers;
-				 * and a new timestamp will only be available after a new
-				 * message has been sent.
-				 * This means that it is currently illegal to prepare two
-				 * timestamped messages on the same switch port without
-				 * waiting for the first timestamp in between. */
-				sja->egress_ts[i][tsreg].ts =
-						sja1105_recreate_ts(clkval, (*reg) >> 8);
-				complete(&sja->egress_ts[i][tsreg].received);
-			}
-		}
-	}
-
 	pr_debug_ratelimited("sja1105_spi: poll_complete; clkval=%llu\n", clkval);
-	mutex_unlock(&sja->buf_lock);
 
-	if (cb) {
-		cb(&local_list, clkval, cb_ctx);
-	} else if (!list_empty(&local_list)) {
-		pr_warn_ratelimited("sja1105_spi: No callback although timestamps requested!\n");
-	}
 	return 0;
 
 done:
-	mutex_unlock(&sja->buf_lock);
+	spi_dev_put(spi);
 	return status;
 }
 
-static int write_mgmt(struct sja1105_spi *sja, unsigned index,
-                      uint8_t portnumber, bool timestamp, unsigned tsreg)
+static int write_mgmt(struct sja1105_spi *sja, struct spi_device *spi, unsigned index,
+                      uint8_t portmask, bool timestamp, unsigned tsreg)
 {
 	struct sja1105_transfer write[1];
 	int err;
 	struct spi_message m;
 	struct spi_transfer t[1];
 	uint32_t *reg;
-	const uint8_t portmask = 1 << portnumber;
 
 	write[0].addr = SJA1105_L2_ADDR_LOOKUP_RECONF;
 	write[0].count = 4;
 	write[0].read = false;
 	write[0].write = true;
 
-	mutex_lock(&sja->buf_lock);
-	err = init_sja_message(sja, write, ARRAY_SIZE(write), &m, t);
+	err = init_sja_message(sja, write, ARRAY_SIZE(write), &m, t,
+						   sja->api_spi_buf, API_BUF_LEN);
 
 	if (err) {
-		mutex_unlock(&sja->buf_lock);
 		return err;
 	}
 
@@ -420,8 +388,8 @@ static int write_mgmt(struct sja1105_spi *sja, unsigned index,
 	pr_debug("sja1105 mgmt write tx: %08X %08X %08X %08X, index=%u\n",
 	         reg[3], reg[2], reg[1], reg[0], index);
 
-	err = spi_sync(sja->dev, &m);
-	mutex_unlock(&sja->buf_lock);
+	atomic_inc(&spi_sync_count);
+	err = spi_sync(spi, &m);
 
 	if (err) {
 		pr_err("sja1105 mgmt write tx error\n");
@@ -431,7 +399,7 @@ static int write_mgmt(struct sja1105_spi *sja, unsigned index,
 	return 0;
 }
 
-static int wait_mgmt_valid(struct sja1105_spi *sja)
+static int wait_mgmt_valid(struct sja1105_spi *sja, struct spi_device *spi)
 {
 	struct sja1105_transfer read[1];
 	int err;
@@ -446,22 +414,21 @@ static int wait_mgmt_valid(struct sja1105_spi *sja)
 	read[0].read = true;
 	read[0].write = false;
 
-	mutex_lock(&sja->buf_lock);
-
 	for (count = 0, done = false;
 	     !done && count < SWITCH_MGMT_READ_RETRIES;
 	     count++)
 	{
-		err = init_sja_message(sja, read, ARRAY_SIZE(read), &m, t);
+		err = init_sja_message(sja, read, ARRAY_SIZE(read), &m, t,
+							   sja->api_spi_buf, API_BUF_LEN);
 		if (err) {
 			return err;
 		}
 
 		reg = read[0].rxdata;
-		err = spi_sync(sja->dev, &m);
+		atomic_inc(&spi_sync_count);
+		err = spi_sync(spi, &m);
 
 		if (err) {
-			mutex_unlock(&sja->buf_lock);
 			pr_err("sja1105 mgmt write rx error\n");
 			return err;
 		}
@@ -474,8 +441,6 @@ static int wait_mgmt_valid(struct sja1105_spi *sja)
 		}
 	}
 
-	mutex_unlock(&sja->buf_lock);
-
 	if (!done) {
 		pr_warn("sja1105 mgmt write not done!\n");
 	}
@@ -483,154 +448,261 @@ static int wait_mgmt_valid(struct sja1105_spi *sja)
 	return 0;
 }
 
-#ifdef READ_MGMT_ROUTE_BEFORE_WRITE
-static int read_mgmt(struct spi_device *spi, struct sja1105_mgmt_message *msg,
-                     unsigned index)
+int sja1105_spi_set_ptp_state(struct sja1105_spi *sja, bool enable_ptp)
 {
-	int err;
-	int count;
-	bool done;
-
-	mutex_lock(&sja->buf_lock);
-
-	msg->txbuf[3] = SJA1105_L2_ADDR_LOOKUP_RECONF_VALID |
-		SJA1105_L2_ADDR_LOOKUP_RECONF_MGMTROUTE;
-
-	msg->txbuf[2] = 0;
-	msg->txbuf[1] = 0;
-	msg->txbuf[0] = (index & 0x3FF) << 20;
-
-	pr_debug("sja1105 mgmt read tx:	%08X %08X %08X %08X, index=%u\n",
-	         reg[3], reg[2], reg[1], reg[0], index);
-
-	err = spi_sync(spi, msg->msg_tx);
-	if (err) {
-		pr_err("sja1105 mgmt read tx error\n");
-		return err;
+	if (!sja) {
+		return -EINVAL;
 	}
 
-	for (count = 0, done = false; !done && count < SWITCH_MGMT_READ_RETRIES;
-	     count++) {
-		err = spi_sync(spi, msg->msg_rx);
-		if (err) {
-			pr_err("sja1105: mgmt read rx error\n");
-			return err;
-		}
-
-		pr_debug("sja1105 mgmt read rx:	%08X %08X %08X %08X\n",
-		         msg->rxbuf[3], msg->rxbuf[2], msg->rxbuf[1], msg->rxbuf[0]);
-		if (0 == (msg->rxbuf[3] & SJA1105_L2_ADDR_LOOKUP_RECONF_VALID)) {
-			done = true;
-		}
+	mutex_lock(&sja->poll_lock);
+	mutex_lock(&sja->api_lock);
+	sja->enable_ptp = enable_ptp;
+	if (!sja->enable_ptp) {
+		WRITE_ONCE(sja->clkval_valid, false);
 	}
-
-	mutex_unlock(&sja->buf_lock);
-
-	if (!done) {
-		pr_warn("sja1105 mgmt read not done!\n");
-	}
+	mutex_unlock(&sja->api_lock);
+	mutex_unlock(&sja->poll_lock);
 
 	return 0;
 }
-#endif
+EXPORT_SYMBOL(sja1105_spi_set_ptp_state);
+
+bool sja1105_spi_is_clkval_valid(struct sja1105_spi *sja)
+{
+	if (!sja) {
+		return false;
+	}
+
+	return !!smp_load_acquire(&sja->clkval_valid);
+}
+EXPORT_SYMBOL(sja1105_spi_is_clkval_valid);
 
 int sja1105_spi_prepare_egress_ptp(struct sja1105_spi *sja, uint8_t portnumber,
                                    bool timestamp, unsigned tsreg)
 {
-	struct spi_device *spi;
+	struct spi_device *spi = sja1105_get_spi(sja);
 	int err;
 
-	if (!sja || portnumber >= SWITCH_PORTS) {
-		return -EINVAL;
+	if (!spi) {
+		if (!sja)
+			return -EINVAL;
+		else
+			return -ESHUTDOWN;
+	}
+
+	if (portnumber >= SWITCH_PORTS) {
+		err = -EINVAL;
+		goto out_spi;
 	}
 
 	if (!port_is_up(sja, portnumber)) {
-		return -ENETDOWN;
+		err = -ENETDOWN;
+		goto out_spi;
 	}
 
-	spin_lock_irq(&sja->spi_lock);
-	spi = sja->dev;
-	spin_unlock_irq(&sja->spi_lock);
-
-	if (!spi) {
-		return -ESHUTDOWN;
+	mutex_lock(&sja->api_lock);
+	if (!sja->enable_ptp) {
+		err = -ENETDOWN;
+		goto out_unlock;
 	}
 
-#ifdef READ_MGMT_ROUTE_BEFORE_WRITE
-	err = read_mgmt(spi, &sja->message_mgmt, sja->mgmt_index);
+	err = wait_mgmt_valid(sja, spi);
 	if (err) {
-		return err;
+		goto out_unlock;
 	}
-#endif
 
-	reinit_completion(&sja->egress_ts[portnumber][tsreg].received);
-	err = write_mgmt(sja, sja->mgmt_index, portnumber, timestamp, tsreg);
+	err = write_mgmt(sja, spi, sja->mgmt_index, 1<<portnumber, timestamp, tsreg);
 
 	if (err) {
-		return err;
+		goto out_unlock;
 	}
 
-	err = wait_mgmt_valid(sja);
+	err = wait_mgmt_valid(sja, spi);
 
+  out_unlock:
+	mutex_unlock(&sja->api_lock);
+  out_spi:
+	spi_dev_put(spi);
 	return err;
 }
 EXPORT_SYMBOL(sja1105_spi_prepare_egress_ptp);
 
-int sja1105_spi_wait_egress_ts(struct sja1105_spi *sja, uint8_t portnumber,
+int sja1105_spi_prepare_egress_ptp_multiport(struct sja1105_spi *sja,
+											 uint8_t *portmap,
+											 bool timestamp, unsigned tsreg)
+{
+	struct spi_device *spi = sja1105_get_spi(sja);
+	int err, i;
+
+	if (!spi) {
+		if (!sja)
+			return -EINVAL;
+		else
+			return -ESHUTDOWN;
+	}
+
+	if ((*portmap >> SWITCH_PORTS) != 0 || *portmap == 0) {
+		err = -EINVAL;
+		goto out_spi;
+	}
+
+	for (i = 0;i < SWITCH_PORTS;++i) {
+		if (!port_is_up(sja, i)) {
+			*portmap &= ~(1<<i);
+		}
+	}
+
+	if (*portmap == 0) {
+		err = -ENETDOWN;
+		goto out_spi;
+	}
+
+	mutex_lock(&sja->api_lock);
+	if (!sja->enable_ptp) {
+		err = -ENETDOWN;
+		goto out_unlock;
+	}
+
+	err = wait_mgmt_valid(sja, spi);
+	if (err) {
+		goto out_unlock;
+	}
+
+	err = write_mgmt(sja, spi, sja->mgmt_index, *portmap, timestamp, tsreg);
+	if (err) {
+		goto out_unlock;
+	}
+
+	err = wait_mgmt_valid(sja, spi);
+
+  out_unlock:
+	mutex_unlock(&sja->api_lock);
+  out_spi:
+	spi_dev_put(spi);
+	return err;
+}
+EXPORT_SYMBOL(sja1105_spi_prepare_egress_ptp_multiport);
+
+static int poll_tx_ts(struct sja1105_spi *sja, struct spi_device *spi,
+					  uint8_t portmask, uint64_t *timestamp, int timeout_ms,
+					  unsigned tsreg)
+{
+	uint32_t *tsbuf;
+	struct sja1105_transfer reads[1];
+	struct spi_message m;
+	struct spi_transfer t[1];
+	int status;
+	unsigned long timeout_jiffies = jiffies + msecs_to_jiffies(timeout_ms) + 1;
+	uint8_t orig_portmask = portmask;
+	int i;
+
+	reads[0].addr = SJA1105_EGRESS_TIMESTAMPS;
+	reads[0].count = 2*SWITCH_PORTS;
+	reads[0].read = true;
+	reads[0].write = false;
+
+	status = init_sja_message(sja, reads, ARRAY_SIZE(reads), &m, t,
+							  sja->api_spi_buf, API_BUF_LEN);
+	if (status) {
+		pr_err("Couldn't create message\n");
+		goto done;
+	}
+
+	tsbuf = reads[0].rxdata;
+
+	pr_debug("switch-spi: Starting Tx poll at %llu\n", ktime_to_ns(ktime_get()));
+
+	spi_bus_lock(spi->controller);
+	do {
+		/* Do spi transfer */
+		atomic_inc(&spi_sync_count);
+		status = spi_sync_locked(spi, &m);
+
+		if (status < 0) {
+			spi_bus_unlock(spi->controller);
+			pr_err("Couldn't send message (%d)\n", status);
+			goto done;
+		}
+
+		for (i = 0;i < SWITCH_PORTS;++i) {
+			if ((portmask&(1<<i)) && (tsbuf[i*2+tsreg] & 0x1)) {
+				timestamp[i] = tsbuf[i*2+tsreg]>>8;
+				portmask &= ~(1<<i);
+			}
+		}
+	} while (portmask != 0 && time_is_after_jiffies(timeout_jiffies));
+	spi_bus_unlock(spi->controller);
+
+	if (portmask != 0) {
+		pr_warn("switch-spi: Could not get Tx timestamp: Timeout\n");
+		status = -ETIMEDOUT;
+		goto done;
+	}
+
+	pr_debug("switch-spi: Finished Tx poll at %llu\n", ktime_to_ns(ktime_get()));
+
+	for (i = 0;i < SWITCH_PORTS;++i) {
+		if (orig_portmask&(1<<i))
+			 timestamp[i] = sja1105_recreate_ts(sja, timestamp[i]);
+	}
+
+	status = 0;
+  done:
+	return status;
+}
+
+int sja1105_spi_wait_egress_ts(struct sja1105_spi *sja, uint8_t portmask,
                                uint64_t *timestamp, int timeout_ms, unsigned tsreg)
 {
-	int err;
-	bool closed;
-
-	if (portnumber > SWITCH_PORTS-1 || !timestamp || !sja) {
-		return -EINVAL;
+	int err, i;
+	struct spi_device *spi = sja1105_get_spi(sja);
+	if (!spi) {
+		if (!sja)
+			return -EINVAL;
+		else
+			return -ESHUTDOWN;
 	}
 
-	if (!port_is_up(sja, portnumber)) {
-		return -ENETDOWN;
+	if (portmask == 0 || portmask>>SWITCH_PORTS != 0 || !timestamp || !sja) {
+		err = -EINVAL;
+		goto out_spi;
 	}
 
-	spin_lock_irq(&sja->spi_lock);
-	closed = (sja->dev == NULL);
-	spin_unlock_irq(&sja->spi_lock);
-
-	if (closed) {
-		return -ESHUTDOWN;
-	}
-
-	if (timeout_ms < 0) {
-		err = wait_for_completion_killable(
-					&sja->egress_ts[portnumber][tsreg].received);
-		if (err < 0) {
-			return -EINTR;
-		}
-	} else {
-		err = wait_for_completion_killable_timeout(
-					&sja->egress_ts[portnumber][tsreg].received,
-					msecs_to_jiffies(timeout_ms));
-		if (err <= 0) {
-			return -EINTR;
+	for (i = 0;i < SWITCH_PORTS;++i) {
+		if (portmask&(1<<i) && !port_is_up(sja, i)) {
+			err = -ENETDOWN;
+			goto out_spi;
 		}
 	}
 
-	*timestamp = sja->egress_ts[portnumber][tsreg].ts;
+	if (timeout_ms < 0 || timeout_ms > SWITCH_EPOCH_MS/3) {
+		timeout_ms = SWITCH_EPOCH_MS/3;
+	}
 
-	return 0;
+	mutex_lock(&sja->api_lock);
+	if (!sja->enable_ptp || !smp_load_acquire(&sja->clkval_valid)) {
+		err = -ENETDOWN;
+		goto out_unlock;
+	}
+
+	err = poll_tx_ts(sja, spi, portmask, timestamp, timeout_ms, tsreg);
+
+  out_unlock:
+	mutex_unlock(&sja->api_lock);
+  out_spi:
+	spi_dev_put(spi);
+	return err;
 }
 EXPORT_SYMBOL(sja1105_spi_wait_egress_ts);
 
 static int thread_poll(void *data)
 {
 	struct sja1105_spi *sja = (struct sja1105_spi *)data;
-	struct spi_device *spi;
 	int err;
 
-	spin_lock_irq(&sja->spi_lock);
-	spi = spi_dev_get(sja->dev);
-	spin_unlock_irq(&sja->spi_lock);
-
 	while (!kthread_should_stop()) {
-		if (sja->poll_config.poll_enable) {
+		mutex_lock(&sja->poll_lock);
+		if (sja->poll_config.poll_enable && (sja->enable_ptp || sja->num_phys > 0)) {
 			err = do_poll(sja);
 			if (err) {
 				pr_err_ratelimited("sja1105_spi: Could not poll switch.\n");
@@ -638,27 +710,28 @@ static int thread_poll(void *data)
 		} else {
 			sja->switch_confd = false;
 		}
+		mutex_unlock(&sja->poll_lock);
 
-		schedule_timeout_interruptible(1);
+		schedule_timeout_interruptible(msecs_to_jiffies(SWITCH_EPOCH_MS/4));
 	}
-
-	spi_dev_put(spi);
 
 	return 0;
 }
 
 static int spidev_message(struct sja1105_spi *sja,
+						  struct spi_device *spi,
                           struct spi_ioc_transfer *u_xfers,
                           unsigned n_xfers)
 {
-	struct spi_device *spi = sja->dev;
 	struct spi_message	msg;
 	struct spi_transfer	*k_xfers;
 	struct spi_transfer	*k_tmp;
 	struct spi_ioc_transfer *u_tmp;
 	unsigned n, total, tx_total, rx_total;
-	u8 *tx_buf, *rx_buf;
+	u8 *tx_buf = sja->user_spi_buf,
+		*rx_buf = sja->user_spi_buf+SJA1105_SPI_BUFSIZE;
 	int status = -EFAULT;
+	static uint64_t message_counter = 0;
 
 	spi_message_init(&msg);
 	k_xfers = kcalloc(n_xfers, sizeof(*k_tmp), GFP_KERNEL);
@@ -667,15 +740,10 @@ static int spidev_message(struct sja1105_spi *sja,
 		return -ENOMEM;
 	}
 
-	mutex_lock(&sja->buf_lock);
-
 	/* Construct spi_message, copying any tx data to bounce buffer.
 	 * We walk the array of user-provided transfers, using each one
 	 * to initialize a kernel version of the same transfer.
 	 */
-	tx_buf = sja->txbuf;
-	rx_buf = sja->rxbuf;
-
 	total = 0;
 	tx_total = 0;
 	rx_total = 0;
@@ -726,6 +794,31 @@ static int spidev_message(struct sja1105_spi *sja,
 			                   u_tmp->len)) {
 				goto done;
 			}
+			if (0) {
+				uint32_t txd = *((uint32_t *)tx_buf);
+				bool write;
+				unsigned wordcount;
+				unsigned address;
+
+				write = (txd >> 31) & 1;
+				wordcount = (txd >> 25) & 0x3f;
+				address = (txd >> 4) & 0x1fffff;
+				if (!write && ((address >= 0x200 && address <= 0x209)
+											 || (address >= 0x400 && address <= 0x440)
+											 || (address >= 0x600 && address <= 0x640))) {
+					pr_info("SJA1105 IOCTL: high-level port status read from 0x%X\n", address);
+				} else if (!write && ((address >= 0 && address <= 0xC)
+															|| (address >= 0xc0 && address <= 0xc9))) {
+					pr_info("SJA1105 IOCTL: general status read from 0x%X\n", address);
+				} else if (!write && ((address >= 0x100 && address <= 0x107)
+															|| (address >= 0x1000 && address <= 0x1007))) {
+					pr_info("SJA1105 IOCTL: L2 memory partition status read from 0x%X\n", address);
+				} else if (address >= 0x100016 && address <= 0x100030) {
+					// CGU access
+				} else {
+					pr_info("SJA1105 IOCTL #%llu: %s length %u at 0x%X\n", message_counter, write ? "write" : "read", wordcount, address);
+				}
+			}
 			tx_buf += k_tmp->len;
 		}
 
@@ -743,6 +836,7 @@ static int spidev_message(struct sja1105_spi *sja,
 		spi_message_add_tail(k_tmp, &msg);
 	}
 
+	atomic_inc(&spi_sync_count);
 	status = spi_sync(spi, &msg);
 
 	if (status < 0) {
@@ -752,7 +846,7 @@ static int spidev_message(struct sja1105_spi *sja,
 	}
 
 	/* Copy any rx data out of bounce buffer */
-	rx_buf = sja->rxbuf;
+	rx_buf = sja->user_spi_buf+SJA1105_SPI_BUFSIZE;
 
 	for (n = n_xfers, u_tmp = u_xfers; n; n--, u_tmp++) {
 		if (u_tmp->rx_buf) {
@@ -768,7 +862,7 @@ static int spidev_message(struct sja1105_spi *sja,
 	status = total;
 
 done:
-	mutex_unlock(&sja->buf_lock);
+	message_counter++;
 	kfree(k_xfers);
 	return status;
 }
@@ -813,11 +907,11 @@ spidev_get_ioc_message(unsigned int cmd, struct spi_ioc_transfer __user *u_ioc,
 	return ioc;
 }
 
-static long sja1105_spi_ioctl(struct file *filp, unsigned int cmd,
+static long sja1105_file_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg)
 {
 	struct sja1105_spi *sja;
-	struct spi_device	*spi;
+	struct spi_device *spi;
 	long ret = 0;
 	struct spi_ioc_transfer	*ioc;
 	unsigned n_ioc;
@@ -831,14 +925,8 @@ static long sja1105_spi_ioctl(struct file *filp, unsigned int cmd,
 		return -ENOTTY;
 	}
 
-	spin_lock_irq(&sja->spi_lock);
-	spi = spi_dev_get(sja->dev);
-	spin_unlock_irq(&sja->spi_lock);
-
-	if (spi == NULL) {
+	if (!(spi = sja1105_get_spi(sja)))
 		return -ESHUTDOWN;
-	}
-
 
 	switch (cmd) {
 	case SPI_IOC_RD_MODE:
@@ -855,7 +943,11 @@ static long sja1105_spi_ioctl(struct file *filp, unsigned int cmd,
 		ret = __put_user(spi->bits_per_word, (__u8 __user *)arg);
 		break;
 	case SPI_IOC_RD_MAX_SPEED_HZ:
+#ifdef SPI_FAKE_SPEED
+		ret = __put_user(READ_ONCE(sja->fake_speed), (__u32 __user *)arg);
+#else
 		ret = __put_user(spi->max_speed_hz, (__u32 __user *)arg);
+#endif
 		break;
 	case SPI_IOC_WR_MODE:
 	case SPI_IOC_WR_MODE32:
@@ -894,28 +986,52 @@ static long sja1105_spi_ioctl(struct file *filp, unsigned int cmd,
 	case SPI_IOC_WR_MAX_SPEED_HZ:
 		ret = __get_user(tmp, (u32 __user *)arg);
 		if (ret == 0) {
+#ifdef SPI_FAKE_SPEED
+			WRITE_ONCE(sja->fake_speed, tmp);
+#else
 			if (tmp != spi->max_speed_hz) {
 				pr_info("sja1105_spi: SPI_IOC_WR_MAX_SPEED_HZ 0x%x\n", tmp);
 				ret = -EPERM;
 			}
+#endif
 		}
 		break;
 	case SJA1105_IOC_POLL:
-		ret = copy_from_user(&tmp_poll, (void*)arg, sizeof(tmp_poll));
+		ret = copy_from_user(&tmp_poll, (const void __user*)arg, sizeof(tmp_poll));
 		if (ret == 0) {
+			mutex_lock(&sja->poll_lock);
+			mutex_lock(&sja->phy_lock);
+			mutex_lock(&sja->api_lock);
 			sja->poll_config.poll_enable = tmp_poll.poll_enable;
 			if (sja->poll_config.poll_enable) {
 				memcpy(sja->poll_config.mac_config, tmp_poll.mac_config,
 					   sizeof(tmp_poll.mac_config));
 				dev_info(sja->chardev, "Poll enabled");
+				sja->switch_confd = false;
 			} else {
 				dev_info(sja->chardev, "Poll disabled");
+				WRITE_ONCE(sja->clkval_valid, false);
 			}
+			mutex_unlock(&sja->api_lock);
+			mutex_unlock(&sja->phy_lock);
+			mutex_unlock(&sja->poll_lock);
 		}
 		break;
+	case SJA1105_IOC_SWITCHID:
+		ret = __get_user(tmp, (u8 __user*)arg);
+		if (ret == 0)
+			WRITE_ONCE(sja->switch_id, tmp);
+		break;
 	default:
+	{
+		ktime_t before, after, duration;
+		static uint64_t ioctl_count = 0;
+
+		int c = atomic_xchg(&spi_sync_count, 0);
+
+		before = ktime_get();
 		ioc = spidev_get_ioc_message(cmd, (struct spi_ioc_transfer __user *)arg,
-		                             &n_ioc);
+																 &n_ioc);
 		if (IS_ERR(ioc)) {
 			ret = PTR_ERR(ioc);
 			break;
@@ -926,9 +1042,18 @@ static long sja1105_spi_ioctl(struct file *filp, unsigned int cmd,
 
 		pr_debug("sja1105_spi: SPI_IOC_MESSAGE\n");
 		/* translate to spi_message, execute */
-		ret = spidev_message(sja, ioc, n_ioc);
+		mutex_lock(&sja->user_buf_lock);
+		ret = spidev_message(sja, spi, ioc, n_ioc);
+		mutex_unlock(&sja->user_buf_lock);
 		kfree(ioc);
+		after = ktime_get();
+		duration = ktime_sub(after, before);
+		if (ktime_to_ns(duration) > 1000000) {
+			pr_info("SJA1105 IOCTL #%llu DURATION: %lld ns, n_ioc=%u, count since last: %d\n", ioctl_count, ktime_to_ns(duration), n_ioc, c);
+		}
+		ioctl_count++;
 		break;
+	}
 	}
 
 	spi_dev_put(spi);
@@ -936,83 +1061,82 @@ static long sja1105_spi_ioctl(struct file *filp, unsigned int cmd,
 	return ret;
 }
 
-int sja1105_find_by_spi(unsigned bus, unsigned chip_select)
+static int match_of_node(struct device *dev, void *data)
 {
+	return (dev_of_node(dev) == data);
+}
+
+struct sja1105_spi *sja1105_get_by_of_node(struct device_node *np)
+{
+	struct device *dev = driver_find_device(&sja1105_spi_driver.driver, NULL, np,
+											&match_of_node);
+	struct sja1105_spi *sja;
+	if (!dev)
+		return NULL;
+
+	mutex_lock(&minor_lock);
+	sja = spi_get_drvdata(to_spi_device(dev));
+	if (sja)
+		kref_get(&sja->ref);
+	mutex_unlock(&minor_lock);
+	put_device(dev);
+	return sja;
+}
+EXPORT_SYMBOL(sja1105_get_by_of_node);
+
+struct sja1105_spi *sja1105_get_by_spi(unsigned bus, unsigned chip_select)
+{
+#ifdef MULTISWITCH
 	int i;
 
 	mutex_lock(&minor_lock);
 	for (i = 0;i < SJA1105_SPI_MAX_CHARDEVS;++i) {
-		struct spi_device *spi;
-		if (sja_by_minor[i] == NULL) {
+		struct sja1105_spi *sja = sja_by_minor[i];
+		struct spi_device *spi = sja1105_get_spi(sja);
+		if (!spi) {
 			continue;
 		}
 
-		spin_lock_irq(&sja_by_minor[i]->spi_lock);
-		spi = spi_dev_get(sja_by_minor[i]->dev);
-		spin_unlock_irq(&sja_by_minor[i]->spi_lock);
-
 		if (spi->master->bus_num == bus &&
 			spi->chip_select == chip_select) {
+			kref_get(&sja->ref);
 			spi_dev_put(spi);
 			mutex_unlock(&minor_lock);
-			return i;
+			return sja;
 		}
 		spi_dev_put(spi);
 	}
 
 	mutex_unlock(&minor_lock);
-	return -1;
-}
-EXPORT_SYMBOL(sja1105_find_by_spi);
-
-struct sja1105_spi *sja1105_spi_get(int minor)
-{
+	return NULL;
+#else
 	struct sja1105_spi *sja;
-
-	if (minor >= SJA1105_SPI_MAX_CHARDEVS) {
-		return NULL;
-	}
-
+	(void)bus;
+	(void)chip_select;
 	mutex_lock(&minor_lock);
-
-	sja = sja_by_minor[minor];
-
-	if (sja) {
-		sja->users++;
-	}
-
+	sja = sja_by_minor[0];
+	if (sja)
+		kref_get(&sja->ref);
 	mutex_unlock(&minor_lock);
-
 	return sja;
+#endif
 }
-EXPORT_SYMBOL(sja1105_spi_get);
+EXPORT_SYMBOL(sja1105_get_by_spi);
 
-void sja1105_spi_put(struct sja1105_spi *sja)
+int sja1105_get_switch_id(struct sja1105_spi *sja)
 {
-	mutex_lock(&minor_lock);
-
-	sja->users--;
-
-	if (!sja->users) {
-		bool dofree;
-
-		spin_lock_irq(&sja->spi_lock);
-		dofree = (sja->dev == NULL);
-		spin_unlock_irq(&sja->spi_lock);
-
-		if (dofree) {
-			kfree(sja);
-		}
-	}
-
-	mutex_unlock(&minor_lock);
+	return READ_ONCE(sja->switch_id);
 }
-EXPORT_SYMBOL(sja1105_spi_put);
+EXPORT_SYMBOL(sja1105_get_switch_id);
 
-static int sja1105_spi_open(struct inode *inode, struct file *filp)
+static int sja1105_file_open(struct inode *inode, struct file *filp)
 {
 	int minor = iminor(file_inode(filp));
-	struct sja1105_spi *sja = sja1105_spi_get(minor);
+	struct sja1105_spi *sja;
+	mutex_lock(&minor_lock);
+	sja = sja_by_minor[minor];
+	kref_get(&sja->ref);
+	mutex_unlock(&minor_lock);
 
 	if (!sja) {
 		return -ENODEV;
@@ -1023,7 +1147,7 @@ static int sja1105_spi_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int sja1105_spi_release(struct inode *inode, struct file *filp)
+static int sja1105_file_release(struct inode *inode, struct file *filp)
 {
 	struct sja1105_spi *sja = filp->private_data;
 	sja1105_spi_put(sja);
@@ -1032,12 +1156,17 @@ static int sja1105_spi_release(struct inode *inode, struct file *filp)
 
 static struct file_operations sja1105_spi_fops = {
 	.owner = THIS_MODULE,
-	.unlocked_ioctl = sja1105_spi_ioctl,
-	.open = sja1105_spi_open,
-	.release = sja1105_spi_release,
+	.unlocked_ioctl = sja1105_file_ioctl,
+	.open = sja1105_file_open,
+	.release = sja1105_file_release,
 };
 
-static int write_port_speed(struct sja1105_spi *sja, struct sja1105_phy *phy)
+static bool port_is_dynamic(struct sja1105_spi *sja, unsigned portnumber) {
+	return (sja->poll_config.mac_config[portnumber] & SJA1105_MAC_RECONF_SPEED_MASK) == 0;
+}
+
+static int write_port_speed(struct sja1105_spi *sja, struct spi_device *spi,
+							struct sja1105_phy *phy)
 {
 	struct sja1105_transfer write[3];
 	int err;
@@ -1045,6 +1174,12 @@ static int write_port_speed(struct sja1105_spi *sja, struct sja1105_phy *phy)
 	struct spi_transfer t[3];
 	uint32_t *reg, *rgmii_clk = NULL, *idiv = NULL;
 	bool rgmii = phy->phydev->interface==PHY_INTERFACE_MODE_RGMII;
+
+	if (!port_is_dynamic(sja, phy->port)) {
+		dev_dbg(sja->chardev, "Port %d: Ignore PHY speed due to static speed in switch config",
+				phy->port);
+		return 0;
+	}
 
 	write[0].addr = SJA1105_MAC_RECONF;
 	write[0].count = 2;
@@ -1063,7 +1198,8 @@ static int write_port_speed(struct sja1105_spi *sja, struct sja1105_phy *phy)
 		write[2].write = true;
 	}
 
-	err = init_sja_message(sja, write, rgmii?3:1, &m, t);
+	err = init_sja_message(sja, write, rgmii?3:1, &m, t,
+						   sja->phy_spi_buf, PHY_BUF_LEN);
 
 	if (err) {
 		return err;
@@ -1137,7 +1273,8 @@ static int write_port_speed(struct sja1105_spi *sja, struct sja1105_phy *phy)
 			rgmii_clk[0], idiv[0], phy->port);
 	}
 
-	err = spi_sync(sja->dev, &m);
+	atomic_inc(&spi_sync_count);
+	err = spi_sync(spi, &m);
 
 	if (err) {
 		dev_err(sja->chardev, "mac write tx error\n");
@@ -1152,7 +1289,7 @@ static bool port_is_up(struct sja1105_spi *sja, unsigned portnumber)
 	int i;
 
 	for (i = 0;i < sja->num_phys;++i) {
-		if (sja->phys[i].port == portnumber) {
+		if (sja->phys[i].port == portnumber && port_is_dynamic(sja, portnumber)) {
 			if (sja->phys[i].last_speed == 0) {
 				return false;
 			} else {
@@ -1169,6 +1306,7 @@ static void sja1105_phy_handler(struct net_device *netdev)
 {
 	struct sja1105_phy *phy = container_of(netdev, struct sja1105_phy, netdev);
 	struct sja1105_spi *sja = phy->sja;
+	struct spi_device *spi = sja1105_get_spi(sja);
 	unsigned sja_speed = 0;
 
 	if (phy->phydev->link) {
@@ -1190,13 +1328,14 @@ static void sja1105_phy_handler(struct net_device *netdev)
 
 	dev_dbg(&netdev->dev, "speed %d\n", sja_speed);
 	phy->last_speed = sja_speed;
-	if (sja->switch_confd) {
-		mutex_lock(&sja->buf_lock);
-		if (write_port_speed(sja, phy) != 0) {
+
+	mutex_lock(&sja->phy_lock);
+	if (spi && sja->switch_confd && sja->poll_config.poll_enable) {
+		if (write_port_speed(sja, spi, phy) != 0) {
 			dev_warn(&netdev->dev, "Could not set port speed\n");
 		}
-		mutex_unlock(&sja->buf_lock);
 	}
+	mutex_unlock(&sja->phy_lock);
 }
 
 struct sja_phy_setupdata {
@@ -1211,7 +1350,7 @@ struct sja_phy_setupdata {
 */
 static int sja1105_phy_early_setup(struct spi_device *spi, struct sja_phy_setupdata *data)
 {
-	struct device_node *np = spi->dev.of_node;
+	struct device_node *np = dev_of_node(&spi->dev);
 	int phymodecount, phyhandlecount;
 	struct of_phandle_args args;
 	int i, err;
@@ -1370,60 +1509,50 @@ static void sja1105_phy_cleanup(struct sja1105_spi *sja)
 static int sja1105_spi_probe(struct spi_device *spi)
 {
 	struct sja1105_spi *sja;
-	static int sja_count = 0;
-	int err, num_phys;
+	int err, num_phys, sja_minor;
 	int i;
-	unsigned tsreg;
 	dev_t devt;
 	struct sja_phy_setupdata phy_data;
+	u8 *spi_buf;
+	struct sched_param param = { .sched_priority = SWITCH_POLLER_SCHED_PRIORITY };
+	struct cpumask mask = { .bits = SWITCH_POLLER_CPU_MASK_BITS };
 
 	num_phys = sja1105_phy_early_setup(spi, &phy_data);
 	if (num_phys < 0) {
 		return num_phys;
 	}
 
-	sja = kzalloc(sizeof(*sja), GFP_KERNEL);
+	sja = kvzalloc(sizeof(*sja), GFP_KERNEL);
 	if (!sja) {
 		err = -ENOMEM;
 		goto err_sjaalloc;
 	}
+
 	spi_set_drvdata(spi, sja);
 	sja->dev = spi;
 	sja->poll_config.poll_enable = true;
 	for (i = 0;i < 5;++i) {
 		sja->poll_config.mac_config[i] = SJA1105_MAC_RECONF_DEFAULT;
 	}
+	WRITE_ONCE(sja->clkval_valid, false);
+	sja->enable_ptp = false;
 	sja->num_phys = num_phys;
+#ifdef SPI_FAKE_SPEED
+	sja->fake_speed = SJA1105_SPI_SPEED_HZ;
+#endif
 
-	/* If requested, allocate DMA buffers */
-	spi->dev.coherent_dma_mask = DMA_BIT_MASK(32);
-	if (!spi->dev.dma_mask) {
-		spi->dev.dma_mask = &spi->dev.coherent_dma_mask;
+	spi_buf = kzalloc(PHY_BUF_LEN+API_BUF_LEN+POLL_BUF_LEN, GFP_KERNEL);
+	if (!spi_buf) {
+		err = -ENOMEM;
+		goto err_spi;
 	}
-
-	/*
-	 * Minimum coherent DMA allocation is PAGE_SIZE, so allocate
-	 * that much and share it between Tx and Rx DMA buffers.
-	 */
-	sja->rxbuf = dmam_alloc_coherent(&spi->dev, PAGE_SIZE, &sja->rxdma, GFP_DMA);
-
-	if (sja->rxbuf) {
-		pr_info("sja1105_spi: Using DMA coherent memory\n");
-		sja->txbuf = (sja->rxbuf + (PAGE_SIZE / 2));
-		sja->txdma = (dma_addr_t)(sja->rxdma + (PAGE_SIZE / 2));
-	} else {
-		pr_info("sja1105_spi: Using kmalloc memory\n");
-		sja->rxbuf = devm_kzalloc(&spi->dev, SJA1105_SPI_BUFSIZE, GFP_KERNEL);
-		if (!sja->rxbuf) {
-			err = -ENOMEM;
-			goto err_dev;
-		}
-		sja->txbuf = devm_kzalloc(&spi->dev, SJA1105_SPI_BUFSIZE, GFP_KERNEL);
-		if (!sja->txbuf) {
-			devm_kfree(&spi->dev, sja->rxbuf);
-		    err = -ENOMEM;
-			goto err_dev;
-		}
+	sja->phy_spi_buf = spi_buf;
+	sja->api_spi_buf = spi_buf+PHY_BUF_LEN;
+	sja->poll_spi_buf = spi_buf+PHY_BUF_LEN+API_BUF_LEN;
+	sja->user_spi_buf = kzalloc(USER_BUF_LEN, GFP_KERNEL);
+	if (!sja->user_spi_buf) {
+		err = -ENOMEM;
+		goto err_spibuf;
 	}
 
 	spin_lock_init(&sja->spi_lock);
@@ -1434,7 +1563,7 @@ static int sja1105_spi_probe(struct spi_device *spi)
 		u32 save_speed = spi->max_speed_hz;
 
 		spi->mode = SPI_MODE_1; /* CPOL=0; CPHA=1 */
-		spi->bits_per_word = 8;
+		spi->bits_per_word = SPI_BITS_PER_WORD;
 		spi->max_speed_hz = SJA1105_SPI_SPEED_HZ;
 
 		err = spi_setup(spi);
@@ -1442,30 +1571,34 @@ static int sja1105_spi_probe(struct spi_device *spi)
 			spi->mode = save_mode;
 			spi->bits_per_word = save_bpw;
 			spi->max_speed_hz = save_speed;
-			goto err_spi;
-		}
-	}
-
-	for (i = 0; i < SWITCH_PORTS; i++) {
-		for (tsreg = 0; tsreg < 2; tsreg++) {
-			init_completion(&sja->egress_ts[i][tsreg].received);
+			goto err_userbuf;
 		}
 	}
 
 	mutex_lock(&minor_lock);
-	devt = MKDEV(sja1105_spi_major, sja_count);
-	sja_by_minor[sja_count] = sja;
-	sja->ts_complete_cb = NULL;
-	spin_lock_init(&sja->ts_complete_lock);
-	INIT_LIST_HEAD(&sja->ts_complete_list);
-	sja->devnum = sja_count;
-	mutex_init(&sja->buf_lock);
+	for (sja_minor = 0; sja_minor < SJA1105_SPI_MAX_CHARDEVS && sja_by_minor[sja_minor]; ++sja_minor);
+	if (sja_minor >= SJA1105_SPI_MAX_CHARDEVS) {
+		err = -ENOSPC;
+		goto err_minor;
+	}
+	devt = MKDEV(sja1105_spi_major, sja_minor);
+	sja_by_minor[sja_minor] = sja;
+	sja->devnum = sja_minor;
+	mutex_init(&sja->phy_lock);
+	mutex_init(&sja->api_lock);
+	mutex_init(&sja->user_buf_lock);
+	mutex_init(&sja->poll_lock);
+#ifdef MULTISWITCH
 	sja->chardev = device_create(sja1105_spi_class, NULL, devt, NULL,
 								 "sja1105_spi%d.%d", spi->master->bus_num,
 								 spi->chip_select);
+#else
+	sja->chardev = device_create(sja1105_spi_class, NULL, devt, NULL, "sja1105_spi%d", sja_minor);
+#endif
+
 	if (IS_ERR(sja->chardev)) {
 		err = PTR_ERR(sja->chardev);
-		pr_err("sja1105_spi: Unable to create device %d\n", sja_count);
+		pr_err("sja1105_spi: Unable to create device %d\n", sja_minor);
 		goto err_dev;
 	}
 
@@ -1477,29 +1610,48 @@ static int sja1105_spi_probe(struct spi_device *spi)
 	}
 	num_phys = 0; // To skip sja1105_phy_early_cleanup if an error occurs after this point.
 
-	sja->users = 1; /* poll thread uses it */
-	sja->poller = kthread_run(thread_poll, sja, "sja1105_spi%d", sja_count);
+	kref_init(&sja->ref);
+	sja->poller = kthread_run(thread_poll, sja, "sja1105_spi%d", sja_minor);
 
 	if (IS_ERR(sja->poller)) {
 		err = PTR_ERR(sja->poller);
 		goto err_poller;
 	}
-
+	err = sched_setscheduler_nocheck(sja->poller,
+					SWITCH_POLLER_SCHED_POLICY,
+					&param);
+	if (err) {
+		pr_err("Could not set switch poller scheduling attrs.\n");
+		goto err_sched;
+	}
+	err = set_cpus_allowed_ptr(sja->poller, &mask);
+	if (err) {
+		pr_err("Could not set switch poller allowed CPUs.\n");
+		goto err_sched;
+	}
 	sja->mgmt_index = SWITCH_MGMTROUTE_INDEX;
-	sja_count++;
 	mutex_unlock(&minor_lock);
 
 	return 0;
-
+  err_sched:
+	kthread_stop(sja->poller);
   err_poller:
-	mutex_destroy(&sja->buf_lock);
 	sja1105_phy_cleanup(sja);
   err_latephy:
 	device_destroy(sja1105_spi_class, devt);
   err_dev:
+	mutex_destroy(&sja->poll_lock);
+	mutex_destroy(&sja->user_buf_lock);
+	mutex_destroy(&sja->api_lock);
+	mutex_destroy(&sja->phy_lock);
+  err_minor:
 	mutex_unlock(&minor_lock);
+  err_userbuf:
+	kfree(sja->user_spi_buf);
+  err_spibuf:
+	kfree(sja->phy_spi_buf);
   err_spi:
-	kfree(sja);
+	kvfree(sja);
   err_sjaalloc:
 	if (num_phys > 0) {
 		sja1105_phy_early_cleanup(num_phys, &phy_data);
@@ -1518,7 +1670,6 @@ static int sja1105_spi_remove(struct spi_device *spi)
 		return -ENXIO;
 	}
 
-	spi_set_drvdata(spi, NULL);
 	devt = MKDEV(sja1105_spi_major, sja->devnum);
 
 	/* stop thread and wait for it to exit */
@@ -1526,28 +1677,39 @@ static int sja1105_spi_remove(struct spi_device *spi)
 
 	sja1105_phy_cleanup(sja);
 
-	mutex_destroy(&sja->buf_lock);
 	/* make sure ops on existing fds can abort cleanly */
 	spin_lock_irq(&sja->spi_lock);
 	sja->dev = NULL;
 	spin_unlock_irq(&sja->spi_lock);
 
-	mutex_lock(&minor_lock);
-	sja->users--; /* for poll thread */
-
 	/* prevent new opens */
+	mutex_lock(&minor_lock);
+	spi_set_drvdata(spi, NULL);
 	sja_by_minor[sja->devnum] = NULL;
 	device_destroy(sja1105_spi_class, devt);
-
-	if (!sja->users) {
-		kfree(sja);
-	}
-
+	sja1105_spi_put(sja);
 	mutex_unlock(&minor_lock);
 
 	return 0;
 }
 
+static void sja1105_spi_release(struct sja1105_spi *sja)
+{
+	mutex_destroy(&sja->poll_lock);
+	mutex_destroy(&sja->user_buf_lock);
+	mutex_destroy(&sja->api_lock);
+	mutex_destroy(&sja->phy_lock);
+
+	kfree(sja->user_spi_buf);
+	kfree(sja->phy_spi_buf);
+	kvfree(sja);
+}
+
+void sja1105_spi_put(struct sja1105_spi *sja)
+{
+	kref_put(&sja->ref, (void(*)(struct kref*))sja1105_spi_release);
+}
+EXPORT_SYMBOL(sja1105_spi_put);
 
 static void sja1105_spi_shutdown(struct spi_device *spi)
 {

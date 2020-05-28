@@ -1,2 +1,2 @@
 # Tag systemd to allow depending on device
-ACTION=="add", SUBSYSTEM=="sja1105_spi", TAG+="systemd"
+ACTION=="add", SUBSYSTEM=="sja1105_spi", TAG+="systemd", ENV{SYSTEMD_WANTS}="sja1105.service sja1105-switch2.service"

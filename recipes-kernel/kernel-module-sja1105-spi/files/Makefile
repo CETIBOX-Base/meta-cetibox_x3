@@ -3,6 +3,10 @@ PWD := $(shell pwd)
 
 obj-m += sja1105_spi.o
 
+UFLAGS = -DSPI_BITS_PER_WORD=8 -DMULTISWITCH -DSWITCHTOPO_DEVICETREE
+
+ccflags-y += $(UFLAGS)
+
 sja1105_spi-objs := switch-spi.o
 
 default:

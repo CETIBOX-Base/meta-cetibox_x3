@@ -16,6 +16,9 @@
 #define SWITCH_MGMTROUTE_INDEX 0
 #define SWITCH_MGMT_READ_RETRIES 10
 
+// 24 bits, 8 ns unit
+#define SWITCH_EPOCH_MS 134
+
 #define PTP_ETHERTYPE 0x88F7
 #define P8021AS_MULTICAST "\x01\x80\xC2\x00\x00\x0E"
 #define PTP_MAC_VAL 0x0180C200000Eull
@@ -54,6 +57,8 @@
 #define SJA1105_MAC_RECONF_VLANPRIO_OFS 12
 #define SJA1105_MAC_RECONF_VLANID_OFS 0
 
+#define SJA1105_MAC_RECONF_SPEED_MASK (0x3<<29)
+
 #define SJA1105_MAC_RECONF_DEFAULT (SJA1105_MAC_RECONF_VALID | \
 									SJA1105_MAC_RECONF_DYN_LEARN | \
 									SJA1105_MAC_RECONF_EGRESS | \
@@ -71,14 +76,6 @@
 #define SJA1105_CLKSRC_IDIV0 0x11
 #define SJA1105_CLKSRC_REF25 0xa
 
-struct sja1105_egress_ts {
-	struct completion received;
-	uint64_t ts;
-};
-
-typedef void (*sja1105_spi_ts_completion)(struct list_head *list, uint64_t ts,
-                                          void *ctx);
-
 struct sja1105_phy;
 
 struct sja1105_poll_config {
@@ -87,14 +84,11 @@ struct sja1105_poll_config {
 };
 
 #define SJA1105_IOC_POLL _IOW(SPI_IOC_MAGIC, 255, struct sja1105_poll_config)
+#define SJA1105_IOC_SWITCHID _IOW(SPI_IOC_MAGIC, 254, uint8_t)
 
 struct sja1105_spi
 {
-	uint8_t *rxbuf;
-	uint8_t *txbuf;
-	dma_addr_t rxdma;
-	dma_addr_t txdma;
-	int users;
+	struct kref ref;
 	int devnum;
 	struct device *chardev;
 
@@ -103,44 +97,61 @@ struct sja1105_spi
 	struct task_struct *poller;
 	unsigned mgmt_index;
 
-	struct sja1105_egress_ts egress_ts[SWITCH_PORTS][2];
+	u8 *phy_spi_buf, *api_spi_buf, *poll_spi_buf, *user_spi_buf;
+	struct mutex phy_lock, api_lock, user_buf_lock, poll_lock;
 
-	spinlock_t ts_complete_lock;
-	sja1105_spi_ts_completion ts_complete_cb;
-	struct list_head ts_complete_list;
-	void *ts_complete_ctx;
-	struct mutex buf_lock;
+	uint64_t clkval;
+	bool clkval_valid;
 
 	bool switch_confd;
 	struct sja1105_poll_config poll_config;
 	struct sja1105_phy *phys;
 	unsigned num_phys;
+	bool enable_ptp;
+#ifdef SPI_FAKE_SPEED
+	uint32_t fake_speed;
+#endif
+	uint8_t switch_id;
 };
 
-/* Recreate real timestamp according to AH1402 */
-static inline uint64_t sja1105_recreate_ts(uint64_t clkval, uint32_t tsval)
+bool sja1105_spi_is_clkval_valid(struct sja1105_spi *sja);
+
+static inline uint64_t sja1105_recreate_ts(struct sja1105_spi *sja, uint32_t tsval)
 {
+	uint64_t clkval = READ_ONCE(sja->clkval);
 	uint64_t clkval_upper = clkval >> 24;
-	if ((clkval & 0xFFFFFF) < tsval) {
-		clkval_upper--;
+	uint32_t clkval_lower = clkval & ((1<<24)-1);
+	const uint32_t half_epoch = (1<<23)-1;
+	int delta = tsval - clkval_lower;
+
+	if (abs(delta) > half_epoch) {
+		if (clkval_lower < tsval) {
+			// clkval has wrapped since tsval was captured
+			--clkval_upper;
+		} else {
+			// the clock has wrapped since clkval was captured
+			++clkval_upper;
+		}
 	}
+
 	/* Multiply by 8ns because that's the switch's resolution */
 	return ((clkval_upper << 24) | tsval) * 8;
 }
 
-
-void sja1105_spi_next_clkval_async(struct sja1105_spi *sja,
-                                   struct list_head *list_entry,
-                                   sja1105_spi_ts_completion cb, void *cb_ctx);
-
 int sja1105_spi_prepare_egress_ptp(struct sja1105_spi *sja, uint8_t portnumber,
                                    bool timestamp, unsigned tsreg);
+int sja1105_spi_prepare_egress_ptp_multiport(struct sja1105_spi *sja, uint8_t *portmask,
+                                   bool timestamp, unsigned tsreg);
 
-int sja1105_spi_wait_egress_ts(struct sja1105_spi *sja, uint8_t portnumber,
+int sja1105_spi_wait_egress_ts(struct sja1105_spi *sja, uint8_t portmask,
                                uint64_t *timestamp, int timeout_ms,
                                unsigned tsreg);
 
-int sja1105_find_by_spi(unsigned bus, unsigned chip_select);
-struct sja1105_spi *sja1105_spi_get(int minor);
+struct sja1105_spi* sja1105_get_by_spi(unsigned bus, unsigned chip_select);
+struct sja1105_spi* sja1105_get_by_of_node(struct device_node *np);
 void sja1105_spi_put(struct sja1105_spi *sja);
+
+int sja1105_get_switch_id(struct sja1105_spi *sja);
+
+int sja1105_spi_set_ptp_state(struct sja1105_spi *sja, bool enabled_ptp);
 #endif

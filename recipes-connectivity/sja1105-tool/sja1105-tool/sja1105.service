@@ -1,6 +1,6 @@
 [Unit]
 Description=Initialize SJA1105 switch
-Wants=sys-devices-virtual-sja1105_spi-sja1105_spi1.1.device
+Requires=sys-devices-virtual-sja1105_spi-sja1105_spi1.1.device
 After=sys-devices-virtual-sja1105_spi-sja1105_spi1.1.device
 
 [Service]
@@ -11,10 +11,7 @@ ExecStartPre=/usr/bin/eth_full_reset.sh
 # by executing a cold reset via sja1105-tool, ignoring its return value. This
 # way, the SPI interfaces are in a good state again.
 ExecStartPre=-/usr/bin/sja1105-tool reset cold
-ExecStartPre=/bin/sh -c "/usr/bin/sja1105-tool config load /etc/sja1105/default.xml"
+ExecStartPre=/bin/sh -c "/usr/bin/sja1105-tool config load /etc/sja1105/default-$(boardid).xml"
 ExecStart=/usr/bin/sja1105-tool config upload
 Restart=on-failure
 RestartSec=2
-
-[Install]
-WantedBy=multi-user.target

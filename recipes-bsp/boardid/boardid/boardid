@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo -n $(head -zn1 /sys/firmware/devicetree/base/compatible|tr -d \\000|cut -d, -f2-)
