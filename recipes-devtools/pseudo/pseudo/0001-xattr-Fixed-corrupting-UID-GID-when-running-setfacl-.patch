@@ -1,0 +1,36 @@
+From 4a5a7fe8f3f1a2719455c4787223e95cc47fe7c9 Mon Sep 17 00:00:00 2001
+From: Johannes Beisswenger <johannes.beisswenger@cetitec.com>
+Date: Tue, 9 Jun 2020 15:45:18 +0200
+Subject: [PATCH] xattr: Fixed corrupting UID&GID when running setfacl -m on a
+ directory
+
+The file mode was accidentally overwritten with only the permission
+bits, causing the server to falsely assume that the database was
+corrupted (because the msg_header.mode did not contain S_IFDIR
+anymore) even though it was the client doing the corruption.
+In practice that had the effect of leaking the UID of the user, into
+the pseudo environment.
+
+This fixes Bug 13959 -- https://bugzilla.yoctoproject.org/show_bug.cgi?id=13959
+
+Signed-off-by: Johannes Beisswenger <johannes.beisswenger@cetitec.com>
+---
+ ports/linux/xattr/pseudo_wrappers.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ports/linux/xattr/pseudo_wrappers.c b/ports/linux/xattr/pseudo_wrappers.c
+index 590af30..3e122d9 100644
+--- a/ports/linux/xattr/pseudo_wrappers.c
++++ b/ports/linux/xattr/pseudo_wrappers.c
+@@ -197,7 +197,7 @@ static int shared_setxattr(const char *path, int fd, const char *name, const voi
+ 			mode |= get_special_bits(path, fd);
+ 			pseudo_debug(PDBGF_XATTR, "posix_acl_access translated to mode %04o. Remaining attribute(s): %d.\n",
+ 				mode, extra);
+-			buf.st_mode = mode;
++
+ 			/* we want to actually issue a corresponding chmod,
+ 			 * as well, or else the file ends up 0600 on the
+ 			 * host. Using the slightly-less-efficient wrap_chmod
+-- 
+2.27.0
+
