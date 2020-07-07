@@ -1,0 +1,25 @@
+From 372f45d1003f5ffb9e2cdb7f9f915786220277f9 Mon Sep 17 00:00:00 2001
+From: Matthias Blankertz <matthias.blankertz@cetitec.com>
+Date: Thu, 18 Jun 2020 11:02:11 +0200
+Subject: [PATCH] plat: rcar: Enable SCIF2 Rx pin pull-up
+
+---
+ plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
+index 0d5b7b70..7d099f2a 100644
+--- a/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
++++ b/plat/renesas/rcar/pfc/H3/pfc_init_h3_v2.c
+@@ -1403,7 +1403,7 @@ void pfc_init_h3_v2(void)
+ 	pfc_reg_write(PFC_PUEN1, 0x00100234U);
+ 	pfc_reg_write(PFC_PUEN2, 0x000004C4U);
+ 	pfc_reg_write(PFC_PUEN3, 0x00000200U);
+-	pfc_reg_write(PFC_PUEN4, 0x3E000000U);
++	pfc_reg_write(PFC_PUEN4, 0x3E800000U);
+ 	pfc_reg_write(PFC_PUEN5, 0x1F000805U);
+ 	pfc_reg_write(PFC_PUEN6, 0x00000006U);
+ 
+-- 
+2.27.0
+

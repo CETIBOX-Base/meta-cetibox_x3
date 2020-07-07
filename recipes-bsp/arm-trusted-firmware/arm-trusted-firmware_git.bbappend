@@ -10,6 +10,7 @@ SRC_URI_append = " \
 	file://0001-plat-renesas-rcar-Make-RPC-secure-settings-optional.patch \
 	file://0002-dont-set-gp2-13-and-gp2-14-for-peripheral-usage.patch \
 	file://0003-dont-set-gp2-7-to-pwm.patch \
+	file://0004-plat-rcar-Enable-SCIF2-Rx-pin-pull-up.patch \
 "
 
 # Build firmware for CETiBox with H3ULCB
