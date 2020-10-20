@@ -72,12 +72,14 @@ do_kernel_metadata_prepend () {
 	rm -f ${S}/.config
 }
 
+LINUX_FIRMWARE_VERSION = "20200918"
+
 # Install USB3.0 firmware to rootfs
-USB3_FIRMWARE_V2 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/r8a779x_usb3_v2.dlmem;md5sum=645db7e9056029efa15f158e51cc8a11"
-USB3_FIRMWARE_V3 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/r8a779x_usb3_v3.dlmem;md5sum=687d5d42f38f9850f8d5a6071dca3109"
+USB3_FIRMWARE_V2 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/r8a779x_usb3_v2.dlmem?h=${LINUX_FIRMWARE_VERSION};name=r8a779x_usb3_v2;downloadfilename=r8a779x_usb3_v2.dlmem"
+USB3_FIRMWARE_V3 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/r8a779x_usb3_v3.dlmem?h=${LINUX_FIRMWARE_VERSION};name=r8a779x_usb3_v3;downloadfilename=r8a779x_usb3_v3.dlmem"
 
 # Install TI WLAN firmware to rootfs
-WL18XX_FW_4 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ti-connectivity/wl18xx-fw-4.bin;md5sum=ccd2e2116451bd77ac267ac967cf383d"
+WL18XX_FW_4 = "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ti-connectivity/wl18xx-fw-4.bin?h=${LINUX_FIRMWARE_VERSION};name=wl18xx_fw_4;downloadfilename=wl18xx-fw-4.bin"
 
 SRC_URI_append = " \
     ${USB3_FIRMWARE_V2} \
@@ -86,6 +88,10 @@ SRC_URI_append = " \
 	file://firmware.conf \
 	file://wl18xx-conf.bin \
 "
+
+SRC_URI[r8a779x_usb3_v2.sha256sum] = "c401eb2dfe69a8817018d244cf84680dbca3e42ee068dc459a2bebe5088a40cb"
+SRC_URI[r8a779x_usb3_v3.sha256sum] = "c49d294f321801a9a5c767c3a5b8e7be3fccec6f87808dc70a7d776c760eeea6"
+SRC_URI[wl18xx_fw_4.sha256sum] = "95f04731257febabc358b95ff06dbb2025d047c6ad3ae0239c8afb92dedc7c5c"
 
 do_download_firmware () {
     install -m 755 ${WORKDIR}/r8a779x_usb3_v*.dlmem ${STAGING_KERNEL_DIR}/firmware
