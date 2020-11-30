@@ -5,6 +5,8 @@ After=sys-devices-virtual-sja1105_spi-sja1105_spi1.2.device
 
 [Service]
 Type=simple
+RuntimeDirectory=sja1105-2
+RuntimeDirectoryPreserve=yes
 # During bootup, noise on the SPI lines could confuse the switch, preventing
 # sja1105-tool from uploading the switch configuration. We hide this problem
 # by executing a cold reset via sja1105-tool, ignoring its return value. This
