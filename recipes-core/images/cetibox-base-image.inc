@@ -35,6 +35,7 @@ IMAGE_INSTALL_append = " \
 
 IMAGE_INSTALL_remove = " \
 	libx11-locale \
+	optee-client \
 "
 
 # Don't install dev packages for openssh (conflicts with dropbear)
