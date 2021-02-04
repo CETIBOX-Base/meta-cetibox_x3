@@ -5,6 +5,7 @@ After=sys-devices-virtual-sja1105_spi-sja1105_spi1.1.device
 
 [Service]
 Type=simple
+RemainAfterExit=yes
 RuntimeDirectory=sja1105
 RuntimeDirectoryPreserve=yes
 ExecStartPre=/usr/bin/eth_full_reset.sh

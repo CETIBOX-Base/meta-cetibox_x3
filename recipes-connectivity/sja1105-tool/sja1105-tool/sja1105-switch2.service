@@ -5,6 +5,7 @@ After=sys-devices-virtual-sja1105_spi-sja1105_spi1.2.device
 
 [Service]
 Type=simple
+RemainAfterExit=yes
 RuntimeDirectory=sja1105-2
 RuntimeDirectoryPreserve=yes
 # During bootup, noise on the SPI lines could confuse the switch, preventing
